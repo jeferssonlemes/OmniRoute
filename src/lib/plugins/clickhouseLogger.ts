@@ -40,11 +40,27 @@ interface ChRow {
   error: string;
 }
 
-let _buffer: ChRow[] = [];
-let _flushTimer: ReturnType<typeof setTimeout> | null = null;
-let _initialized = false;
-let _initError: string | null = null;
-let _consecutiveFailures = 0;
+// IMPORTANT: store state on globalThis so all Webpack-split copies of this
+// module share the same buffer/initialized flag. Next.js dynamic imports
+// can produce per-consumer chunk copies, and without a shared singleton
+// the minifier strips the emit path (it sees _initialized never becoming
+// true within its own chunk and treats the function body as unreachable).
+interface ChState {
+  buffer: ChRow[];
+  flushTimer: ReturnType<typeof setTimeout> | null;
+  initialized: boolean;
+  initError: string | null;
+  consecutiveFailures: number;
+}
+
+const STATE_KEY = "__omniClickHouseLoggerState";
+const _state: ChState = ((globalThis as any)[STATE_KEY] ??= {
+  buffer: [],
+  flushTimer: null,
+  initialized: false,
+  initError: null,
+  consecutiveFailures: 0,
+});
 
 function authHeaders(): Record<string, string> {
   const h: Record<string, string> = {
@@ -96,8 +112,8 @@ SETTINGS index_granularity = 8192
 }
 
 async function flushBuffer(): Promise<void> {
-  if (_buffer.length === 0) return;
-  const batch = _buffer.splice(0, _buffer.length);
+  if (_state.buffer.length === 0) return;
+  const batch = _state.buffer.splice(0, _state.buffer.length);
 
   const body = batch.map((r) => JSON.stringify(r)).join("\n");
   const query = `INSERT INTO ${TABLE} FORMAT JSONEachRow`;
@@ -116,32 +132,32 @@ async function flushBuffer(): Promise<void> {
       const text = await res.text().catch(() => "unknown");
       throw new Error(`CH insert ${res.status}: ${text.slice(0, 200)}`);
     }
-    _consecutiveFailures = 0;
+    _state.consecutiveFailures = 0;
     if (process.env.APP_LOG_LEVEL === "debug") {
       // eslint-disable-next-line no-console
       console.log(`[ClickHouse] flushed ${batch.length} rows`);
     }
   } catch (err: any) {
-    _consecutiveFailures++;
+    _state.consecutiveFailures++;
     // eslint-disable-next-line no-console
-    console.error(`[ClickHouse] flush failed (${_consecutiveFailures}x): ${err.message}`);
+    console.error(`[ClickHouse] flush failed (${_state.consecutiveFailures}x): ${err.message}`);
     // Re-queue, but enforce max buffer. If we keep failing, drop oldest.
-    const total = _buffer.length + batch.length;
+    const total = _state.buffer.length + batch.length;
     if (total > MAX_BUFFER) {
       const drop = total - MAX_BUFFER;
       // eslint-disable-next-line no-console
       console.error(`[ClickHouse] buffer overflow — dropping ${drop} oldest rows`);
-      _buffer = [...batch, ..._buffer].slice(drop);
+      _state.buffer = [...batch, ..._state.buffer].slice(drop);
     } else {
-      _buffer.unshift(...batch);
+      _state.buffer.unshift(...batch);
     }
   }
 }
 
 function scheduleFlush() {
-  if (_flushTimer) return;
-  _flushTimer = setTimeout(() => {
-    _flushTimer = null;
+  if (_state.flushTimer) return;
+  _state.flushTimer = setTimeout(() => {
+    _state.flushTimer = null;
     flushBuffer().catch(() => {});
   }, FLUSH_MS);
 }
@@ -156,14 +172,14 @@ function safeJson(value: unknown, fallback = "<serialize-failed>"): string {
 
 /** Call once at server startup. Idempotent. */
 export async function initClickHouseLogger(): Promise<void> {
-  if (_initialized || _initError) return;
+  if (_state.initialized || _state.initError) return;
   try {
     await ensureTable();
-    _initialized = true;
+    _state.initialized = true;
     // eslint-disable-next-line no-console
     console.log(`[ClickHouse] logger ready — ${TABLE} (ttl=7d, batch=${BATCH_SIZE}, maxBuf=${MAX_BUFFER})`);
   } catch (err: any) {
-    _initError = err.message;
+    _state.initError = err.message;
     // eslint-disable-next-line no-console
     console.error(`[ClickHouse] init failed: ${err.message}`);
   }
@@ -171,7 +187,7 @@ export async function initClickHouseLogger(): Promise<void> {
 
 /** Emits a call-log row to ClickHouse (best-effort, never throws). */
 export function emitClickHouseLog(entry: Record<string, any>): void {
-  if (!_initialized) return;
+  if (!_state.initialized) return;
 
   const tokens = entry.tokens || {};
   const duration = typeof entry.duration === "number" ? entry.duration : 0;
@@ -197,8 +213,8 @@ export function emitClickHouseLog(entry: Record<string, any>): void {
     error,
   };
 
-  _buffer.push(row);
-  if (_buffer.length >= BATCH_SIZE) {
+  _state.buffer.push(row);
+  if (_state.buffer.length >= BATCH_SIZE) {
     flushBuffer().catch(() => {});
   } else {
     scheduleFlush();
