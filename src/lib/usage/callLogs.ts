@@ -727,6 +727,14 @@ export async function saveCallLog(entry: any) {
     });
 
     scheduleCallLogRotation();
+
+    // Best-effort external ClickHouse mirror (non-blocking)
+    try {
+      const { emitClickHouseLog } = await import("../plugins/clickhouseLogger");
+      emitClickHouseLog(entry);
+    } catch {
+      // Ignore CH emitter failures
+    }
   } catch (error) {
     console.error("[callLogs] Failed to save call log:", (error as Error).message);
   }
