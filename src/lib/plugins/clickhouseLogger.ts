@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE} (
 ENGINE = MergeTree()
 PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (api_key_id, timestamp)
-TTL timestamp + INTERVAL 7 DAY
+TTL toDateTime(timestamp) + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192
 `.trim();
   await chExec(ddl);
