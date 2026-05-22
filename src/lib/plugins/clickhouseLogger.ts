@@ -197,9 +197,14 @@ export function emitClickHouseLog(entry: Record<string, any>): void {
   const response = LOG_FULL_BODY ? safeJson(entry.responseBody) : "";
   const error = entry.error ? safeJson(entry.error) : "";
 
+  // ClickHouse JSONEachRow DateTime64 does not accept ISO 8601 (`T`/`Z`).
+  // Convert to the supported `YYYY-MM-DD HH:MM:SS.sss` form.
+  const rawTs = typeof entry.timestamp === "string" ? entry.timestamp : new Date().toISOString();
+  const chTimestamp = rawTs.replace("T", " ").replace("Z", "").replace(/\.(\d{3})\d*$/, ".$1");
+
   const row: ChRow = {
     request_id: String(entry.id || entry.requestId || "unknown"),
-    timestamp: typeof entry.timestamp === "string" ? entry.timestamp : new Date().toISOString(),
+    timestamp: chTimestamp,
     api_key_id: String(entry.apiKeyId || "unknown"),
     model: String(entry.model || entry.requestedModel || "unknown"),
     provider: String(entry.provider || "unknown"),
