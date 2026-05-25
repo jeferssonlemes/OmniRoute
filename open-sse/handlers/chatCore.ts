@@ -17,6 +17,7 @@ import { addBufferToUsage, filterUsageForFormat, estimateUsage } from "../utils/
 import { refreshWithRetry, isUnrecoverableRefreshError } from "../services/tokenRefresh.ts";
 import { createRequestLogger } from "../utils/requestLogger.ts";
 import { getModelTargetFormat, PROVIDER_ID_TO_ALIAS } from "../config/providerModels.ts";
+import { DEFAULT_THINKING_CLAUDE_SIGNATURE } from "../config/defaultThinkingSignature.ts";
 import {
   getStripTypesForProviderModel,
   stripIncompatibleMessageContent,
@@ -39,6 +40,7 @@ import {
   SSE_HEARTBEAT_INTERVAL_MS,
   STREAM_IDLE_TIMEOUT_MS,
   STREAM_READINESS_TIMEOUT_MS,
+  ANTIGRAVITY_PRE_RESPONSE_TIMEOUT_CODE,
 } from "../config/constants.ts";
 import {
   classifyProviderError,
@@ -63,6 +65,7 @@ import {
   getChatLogMaxObjectKeys,
 } from "@/lib/logEnv";
 import { logAuditEvent } from "@/lib/compliance";
+import { emit } from "@/lib/events/eventBus";
 import { extractProviderWarnings } from "@/lib/compliance/providerAudit";
 import { adaptBodyForCompression } from "../services/compression/bodyAdapter.ts";
 import { handleBypassRequest } from "../utils/bypassHandler.ts";
@@ -432,6 +435,36 @@ export function shouldUseNativeCodexPassthrough({
   while (normalizedEndpoint.endsWith("/")) normalizedEndpoint = normalizedEndpoint.slice(0, -1);
   const segments = normalizedEndpoint.split("/");
   return segments.includes("responses");
+}
+
+/**
+ * Convert all historical `thinking` / `redacted_thinking` blocks in assistant
+ * messages to `redacted_thinking` carrying a synthetic default signature.
+ *
+ * A thinking block's `signature` is cryptographically bound to the auth token
+ * that generated it. In Anthropic-native Claude OAuth passthrough, when a session
+ * starts on one model (token A) and then switches model or falls over (token B),
+ * Anthropic rejects every historical signature with 400 "Invalid signature in
+ * thinking block" (issue #2454). `redacted_thinking` bypasses signature validation.
+ *
+ * ALL assistant turns are converted, including the last — under a different token
+ * every signature is invalid, so there is no "preserve latest" exception. Returns a
+ * new messages array (original is not mutated) only touching messages that changed.
+ */
+export function redactPassthroughThinkingSignatures(messages: unknown, signature: string): unknown {
+  if (!Array.isArray(messages)) return messages;
+  return (messages as Record<string, unknown>[]).map((msg) => {
+    if (!msg || msg.role !== "assistant" || !Array.isArray(msg.content)) return msg;
+    let modified = false;
+    const newContent = (msg.content as Record<string, unknown>[]).map((block) => {
+      if (block && (block.type === "thinking" || block.type === "redacted_thinking")) {
+        modified = true;
+        return { type: "redacted_thinking", data: signature };
+      }
+      return block;
+    });
+    return modified ? { ...msg, content: newContent } : msg;
+  });
 }
 
 export function isClaudeCodeSemanticPassthroughRequest({
@@ -863,10 +896,18 @@ function isSemaphoreCapacityError(error: unknown): error is Error & { code: stri
   );
 }
 
-function createStreamingErrorResult(statusCode: number, message: string, code?: string) {
+function createStreamingErrorResult(
+  statusCode: number,
+  message: string,
+  code?: string,
+  type?: string
+) {
   const errorBody = buildErrorBody(statusCode, message);
   if (code) {
     errorBody.error.code = code;
+  }
+  if (type) {
+    errorBody.error.type = type;
   }
 
   const body = `data: ${JSON.stringify(errorBody)}\n\ndata: [DONE]\n\n`;
@@ -885,6 +926,12 @@ function createStreamingErrorResult(statusCode: number, message: string, code?: 
       },
     }),
   };
+}
+
+function getUpstreamErrorIdentifier(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  const value = (error as { code?: unknown }).code;
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 function wrapReadableStreamWithFinalize<T>(
@@ -1245,9 +1292,14 @@ function isCopilotClient(
 export function extractSystemRoleMessages(payload: Record<string, unknown>): void {
   if (!Array.isArray(payload.messages)) return;
   const messages = payload.messages as Array<{ role?: unknown; content?: unknown }>;
-  const systemMessages = messages.filter(
-    (m) => typeof m.role === "string" && m.role.toLowerCase() === "system"
-  );
+  // Treat both `system` and `developer` as system-equivalent (OpenAI's Responses
+  // API renamed system → developer). Anthropic rejects either as a chat role, so
+  // both must be lifted into the top-level `system` field — parity with the
+  // normal-path extractSystemMessagesToBody closure.
+  const isSystemRole = (role: unknown): boolean =>
+    typeof role === "string" &&
+    (role.toLowerCase() === "system" || role.toLowerCase() === "developer");
+  const systemMessages = messages.filter((m) => isSystemRole(m.role));
   if (systemMessages.length === 0) return;
 
   const extraBlocks: Array<Record<string, unknown>> = [];
@@ -1272,9 +1324,7 @@ export function extractSystemRoleMessages(payload: Record<string, unknown>): voi
       payload.system = extraBlocks;
     }
   }
-  payload.messages = messages.filter(
-    (m) => typeof m.role !== "string" || m.role.toLowerCase() !== "system"
-  );
+  payload.messages = messages.filter((m) => !isSystemRole(m.role));
 }
 
 export async function handleChatCore({
@@ -1317,6 +1367,17 @@ export async function handleChatCore({
   // Per-request trace id + checkpoint helper. Lets us see exactly which await
   // a hung request was sitting on in `[STAGE_TRACE]` log lines.
   const traceId = Math.random().toString(36).slice(2, 8);
+
+  // Emit request.started event for real-time dashboard
+  setImmediate(() => {
+    emit("request.started", {
+      id: traceId,
+      model: model || "unknown",
+      provider: provider || "unknown",
+      timestamp: startTime,
+      comboName: comboName || undefined,
+    });
+  });
   const trace = (label: string, extra?: Record<string, unknown>) => {
     const elapsed = Date.now() - startTime;
     const suffix = extra ? ` ${JSON.stringify(extra)}` : "";
@@ -1354,6 +1415,7 @@ export async function handleChatCore({
       apiKeyId: apiKeyInfo?.id || undefined,
       apiKeyName: apiKeyInfo?.name || undefined,
       serviceTier: effectiveServiceTier,
+      comboStrategy: isCombo ? comboStrategy || undefined : undefined,
     }).catch(() => {});
   };
 
@@ -2058,6 +2120,7 @@ export async function handleChatCore({
   const allMessages = compressionBody?.messages || body?.contents || body?.request?.contents || [];
   let cavemanOutputModeApplied = false;
   let cavemanOutputModeIntensity: string | null = null;
+  let preCompressionBody: typeof body | null = null;
   if (body && Array.isArray(allMessages) && allMessages.length > 0) {
     let estimatedTokens = estimateTokens(JSON.stringify(allMessages));
     let promptCompressionEnabled = false;
@@ -2509,6 +2572,10 @@ export async function handleChatCore({
       `Checking compression: ${estimatedTokens} tokens vs ${threshold} threshold (${contextLimit} limit, ${reservedTokens} reserved)`
     );
 
+    // Capture pre-compression body so translators can access original message
+    // content even after compression alters it (e.g. stable Kiro conversationId).
+    preCompressionBody = body;
+
     if (promptCompressionEnabled && estimatedTokens > threshold) {
       log?.info?.(
         "CONTEXT",
@@ -2612,6 +2679,45 @@ export async function handleChatCore({
     content?: unknown;
   };
 
+  // Shared helper: lift any system/developer role messages out of the messages
+  // array into the top-level system parameter. Anthropic's Messages API rejects
+  // system/developer roles inside messages[]. Case-insensitive to be defensive.
+  const extractSystemMessagesToBody = (payload: Record<string, unknown>) => {
+    if (!Array.isArray(payload.messages)) return;
+    const messages = payload.messages as ClaudeMessage[];
+    const systemMessages = messages.filter((m) => {
+      const role = String(m.role || "").toLowerCase();
+      return role === "system" || role === "developer";
+    });
+    if (systemMessages.length === 0) return;
+    const extraBlocks: ClaudeContentBlock[] = [];
+    for (const sm of systemMessages) {
+      if (typeof sm.content === "string" && sm.content.length > 0) {
+        extraBlocks.push({ type: "text", text: sm.content });
+      } else if (Array.isArray(sm.content)) {
+        for (const block of sm.content as ClaudeContentBlock[]) {
+          if (block?.type === "text" && typeof block.text === "string" && block.text.length > 0) {
+            extraBlocks.push(block);
+          }
+        }
+      }
+    }
+    if (extraBlocks.length > 0) {
+      const existingSystem = payload.system;
+      if (typeof existingSystem === "string" && existingSystem.length > 0) {
+        payload.system = [{ type: "text", text: existingSystem }, ...extraBlocks];
+      } else if (Array.isArray(existingSystem)) {
+        payload.system = [...(existingSystem as ClaudeContentBlock[]), ...extraBlocks];
+      } else {
+        payload.system = extraBlocks;
+      }
+    }
+    payload.messages = messages.filter((m) => {
+      const role = String(m.role || "").toLowerCase();
+      return role !== "system" && role !== "developer";
+    });
+  };
+
   const normalizeClaudeUpstreamMessages = (
     payload: Record<string, unknown>,
     options?: { preserveToolResultBlocks?: boolean }
@@ -2620,7 +2726,7 @@ export async function handleChatCore({
     if (!Array.isArray(payload.messages)) return;
     let messages = payload.messages as ClaudeMessage[];
 
-    // Extract system role messages (Issue #1797)
+    // Extract system/developer role messages into top-level system parameter (Issue #1797).
     extractSystemRoleMessages(payload);
     messages = payload.messages as ClaudeMessage[];
 
@@ -2726,7 +2832,12 @@ export async function handleChatCore({
           credentials,
           provider,
           reqLogger,
-          { normalizeToolCallId, preserveDeveloperRole, preserveCacheControl }
+          {
+            normalizeToolCallId,
+            preserveDeveloperRole,
+            preserveCacheControl,
+            copilotClient: copilotCompatibleReasoning,
+          }
         );
       }
 
@@ -2744,6 +2855,15 @@ export async function handleChatCore({
         preserveClaudeMessages: sourceFormat === FORMATS.CLAUDE && isClaudeCodeSemanticPassthrough,
       });
       log?.debug?.("FORMAT", "claude-code-compatible bridge enabled");
+
+      if (isClaudeCodeSemanticPassthrough) {
+        // Semantic passthrough: only lift system/developer role messages
+        // without converting file/document blocks, tool history, etc.
+        extractSystemRoleMessages(translatedBody);
+      } else {
+        // Non-CC path: full normalization including content type conversion.
+        normalizeClaudeUpstreamMessages(translatedBody, { preserveToolResultBlocks: true });
+      }
     } else if (isClaudePassthrough) {
       // Pure passthrough: forward the body as-is without OpenAI round-trip.
       // The Claude→OpenAI→Claude double translation was lossy and corrupted
@@ -2752,14 +2872,28 @@ export async function handleChatCore({
       // regardless of combo strategy or cache_control settings.
       translatedBody = { ...body };
       translatedBody._disableToolPrefix = true;
-      if (!isClaudeCodeSemanticPassthrough) {
-        normalizeClaudeUpstreamMessages(translatedBody, { preserveToolResultBlocks: true });
-      } else {
-        // Lightweight system role extraction only — preserves all other
-        // Claude Code payload structure (documents, tool history, etc.)
-        // while correcting memory injection's role:"system" message.
+
+      // Sanitize historical thinking-block signatures for Anthropic-native Claude OAuth.
+      // Only Anthropic's first-party API validates these signatures (token-bound); third-party
+      // Claude-shape providers do not. See redactPassthroughThinkingSignatures + issue #2454.
+      if (provider === "claude") {
+        translatedBody.messages = redactPassthroughThinkingSignatures(
+          translatedBody.messages,
+          DEFAULT_THINKING_CLAUDE_SIGNATURE
+        ) as typeof translatedBody.messages;
+      }
+
+      // Fix #2468: always extract role:"system" → top-level system.
+      // The semantic passthrough correctly skips the Claude→OpenAI→Claude
+      // round-trip, but even pure Claude bodies may carry system content as
+      // role:"system" messages rather than the top-level system field, which
+      // Anthropic's Messages API now rejects with a 400.
+      if (isClaudeCodeSemanticPassthrough) {
+        // Only lift system/developer messages — preserves Claude Code's
+        // native payload structure (documents, tool chains, thinking, etc.)
         extractSystemRoleMessages(translatedBody);
-        log?.debug?.("FORMAT", "claude-code semantic passthrough enabled");
+      } else {
+        normalizeClaudeUpstreamMessages(translatedBody, { preserveToolResultBlocks: true });
       }
 
       log?.debug?.("FORMAT", `claude passthrough (preserveCache=${preserveCacheControl})`);
@@ -2862,6 +2996,8 @@ export async function handleChatCore({
           preserveDeveloperRole,
           preserveCacheControl,
           signatureNamespace: connectionId,
+          copilotClient: copilotCompatibleReasoning,
+          ...(preCompressionBody ? { preCompressionBody } : {}),
         }
       );
     }
@@ -3581,6 +3717,9 @@ export async function handleChatCore({
       error.name === "AbortError"
         ? "Request aborted"
         : formatProviderError(error, provider, model, failureStatus);
+    const upstreamErrorCode = getUpstreamErrorIdentifier(error);
+    const upstreamErrorType =
+      upstreamErrorCode === ANTIGRAVITY_PRE_RESPONSE_TIMEOUT_CODE ? "upstream_timeout" : undefined;
     appendRequestLog({
       model,
       provider,
@@ -3601,10 +3740,29 @@ export async function handleChatCore({
     }
     persistFailureUsage(
       failureStatus,
-      error instanceof Error && error.name ? error.name : "upstream_error"
+      upstreamErrorCode || (error instanceof Error && error.name ? error.name : "upstream_error")
     );
     console.log(`${COLORS.red}[ERROR] ${failureMessage}${COLORS.reset}`);
-    return createErrorResult(failureStatus, failureMessage);
+    if (stream && upstreamErrorCode) {
+      const result = createStreamingErrorResult(
+        failureStatus,
+        failureMessage,
+        upstreamErrorCode,
+        upstreamErrorType
+      );
+      return {
+        ...result,
+        errorType: upstreamErrorType,
+        errorCode: upstreamErrorCode,
+      };
+    }
+    return createErrorResult(
+      failureStatus,
+      failureMessage,
+      null,
+      upstreamErrorCode,
+      upstreamErrorType
+    );
   }
   // We need to peek at the error text if it's 400 for Qwen
   let upstreamErrorParsed = false;
@@ -3639,14 +3797,21 @@ export async function handleChatCore({
     parsedStatusCode === HTTP_STATUS.BAD_REQUEST &&
     parsedMessage?.toLowerCase().includes("session has expired");
 
-  const streamOptionsOnlyFailed = false; // TODO: properly track stream options failure? (placeholder from existing logic)
+  // Track whether stream_options was present and stripped — if so, 401/403 after
+  // that may be from the modification rather than a genuine auth failure, so we
+  // skip the credential refresh attempt in that case.
+  const hadStreamOptions =
+    targetFormat === FORMATS.OPENAI_RESPONSES && "stream_options" in translatedBody;
+  if (hadStreamOptions) {
+    delete translatedBody.stream_options;
+  }
 
   // Handle 401/403 (and Qwen explicit expiration) - try token refresh using executor
   if (
     (providerResponse.status === HTTP_STATUS.UNAUTHORIZED ||
       providerResponse.status === HTTP_STATUS.FORBIDDEN ||
       isQwenExpiredError) &&
-    !streamOptionsOnlyFailed // Keep constraint if stream options failed originally
+    !hadStreamOptions // Skip refresh if failure may be from stream_options removal, not auth
   ) {
     const newCredentials = (await refreshWithRetry(
       () => executor.refreshCredentials(credentials, log),
@@ -4355,6 +4520,7 @@ export async function handleChatCore({
         apiKeyId: apiKeyInfo?.id || undefined,
         apiKeyName: apiKeyInfo?.name || undefined,
         serviceTier: effectiveServiceTier,
+        comboStrategy: isCombo ? comboStrategy || undefined : undefined,
       }).catch((err) => {
         console.error("Failed to save usage stats:", err.message);
       });
@@ -4732,6 +4898,7 @@ export async function handleChatCore({
         apiKeyId: apiKeyInfo?.id || undefined,
         apiKeyName: apiKeyInfo?.name || undefined,
         serviceTier: effectiveServiceTier,
+        comboStrategy: isCombo ? comboStrategy || undefined : undefined,
       }).catch((err) => {
         console.error("Failed to save usage stats:", err.message);
       });

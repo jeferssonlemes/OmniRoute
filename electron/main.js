@@ -173,7 +173,11 @@ function sendToRenderer(channel, data) {
 }
 
 // ── Helper: Wait for server readiness (#1, #10) ────────────
-async function waitForServer(url, timeoutMs = 30000) {
+// Default raised to 180s: the first launch after an upgrade can run long DB
+// migrations, during which the server accepts the TCP connection but holds the
+// HTTP response until handlers initialize. The previous 30s cap timed out and
+// left the window stuck on a hanging connection (#2460).
+async function waitForServer(url, timeoutMs = 180000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -352,9 +356,17 @@ function createWindow() {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
-  // Show window when ready
+  // Show window when ready (unless starting minimized/hidden in tray)
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show();
+    const startHidden =
+      process.argv.includes("--hidden") ||
+      process.argv.includes("--minimized") ||
+      app.getLoginItemSettings().wasOpenedAsHidden;
+    if (!startHidden) {
+      mainWindow.show();
+    } else {
+      console.log("[Electron] Launched hidden in background tray");
+    }
   });
 
   // Handle external links — validate URL protocol to prevent RCE
@@ -603,6 +615,17 @@ function startNextServer() {
     // Detect server ready
     if (text.includes("Ready") || text.includes("started") || text.includes("listening")) {
       sendToRenderer("server-status", { status: "running", port: serverPort });
+      const isHeadless =
+        process.argv.includes("--headless") ||
+        process.argv.includes("--cli") ||
+        process.env.OMNIROUTE_HEADLESS === "true";
+      if (isHeadless && !global.loggedHeadlessReady) {
+        global.loggedHeadlessReady = true;
+        console.log("\n\x1b[32m✔ OmniRoute Headless CLI Server is ready and listening!\x1b[0m");
+        console.log(`  \x1b[1mPort:\x1b[0m       http://localhost:${serverPort}`);
+        console.log(`  \x1b[1mAPI Base:\x1b[0m   http://localhost:${serverPort}/v1`);
+        console.log("  \x1b[2mPress Ctrl+C to terminate the process.\x1b[0m\n");
+      }
     }
   });
 
@@ -626,6 +649,72 @@ function stopNextServer() {
   if (nextServer) {
     nextServer.kill("SIGTERM");
     nextServer = null;
+  }
+}
+
+// Linux-specific autostart helpers using standard .desktop entry placement
+function enableLinuxDesktopAutostart() {
+  try {
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    const autostartDir = path.join(os.homedir(), ".config", "autostart");
+    fs.mkdirSync(autostartDir, { recursive: true });
+
+    const execPath = app.getPath("exe");
+    const desktopFileContent =
+      [
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=OmniRoute",
+        "Comment=OmniRoute Desktop Client",
+        `Exec="${execPath}" --hidden`,
+        "Terminal=false",
+        "Hidden=false",
+        "X-GNOME-Autostart-enabled=true",
+      ].join("\n") + "\n";
+
+    fs.writeFileSync(path.join(autostartDir, "omniroute-desktop.desktop"), desktopFileContent, {
+      mode: 0o644,
+    });
+    return true;
+  } catch (err) {
+    console.error("[Electron] Failed to enable Linux autostart:", err);
+    return false;
+  }
+}
+
+function disableLinuxDesktopAutostart() {
+  try {
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    const desktopPath = path.join(
+      os.homedir(),
+      ".config",
+      "autostart",
+      "omniroute-desktop.desktop"
+    );
+    if (fs.existsSync(desktopPath)) {
+      fs.unlinkSync(desktopPath);
+    }
+    return true;
+  } catch (err) {
+    console.error("[Electron] Failed to disable Linux autostart:", err);
+    return false;
+  }
+}
+
+function isLinuxDesktopAutostartEnabled() {
+  try {
+    const os = require("os");
+    const fs = require("fs");
+    const path = require("path");
+    return fs.existsSync(
+      path.join(os.homedir(), ".config", "autostart", "omniroute-desktop.desktop")
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -702,6 +791,46 @@ function setupIpcHandlers() {
   });
 
   ipcMain.handle("get-app-version", () => app.getVersion());
+
+  // Autostart management handlers
+  ipcMain.handle("get-autostart-status", () => {
+    if (process.platform === "linux") {
+      return isLinuxDesktopAutostartEnabled();
+    }
+    return app.getLoginItemSettings().openAtLogin;
+  });
+
+  ipcMain.handle("enable-autostart", () => {
+    if (process.platform === "linux") {
+      return enableLinuxDesktopAutostart();
+    }
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: true,
+        openAsHidden: true,
+        args: ["--hidden"],
+      });
+      return true;
+    } catch (err) {
+      console.error("[Electron] Enable autostart failed:", err);
+      return false;
+    }
+  });
+
+  ipcMain.handle("disable-autostart", () => {
+    if (process.platform === "linux") {
+      return disableLinuxDesktopAutostart();
+    }
+    try {
+      app.setLoginItemSettings({
+        openAtLogin: false,
+      });
+      return true;
+    } catch (err) {
+      console.error("[Electron] Disable autostart failed:", err);
+      return false;
+    }
+  });
 }
 
 // ── App Lifecycle ──────────────────────────────────────────
@@ -709,16 +838,39 @@ app.whenReady().then(async () => {
   // Fix #15: Set up CSP before any content loads
   setupContentSecurityPolicy();
 
+  // Headless mode check: supports running without any UI windows or tray icons
+  const isHeadless =
+    process.argv.includes("--headless") ||
+    process.argv.includes("--cli") ||
+    process.env.OMNIROUTE_HEADLESS === "true";
+
   // Fix #1: Start server and WAIT for readiness before showing window
   startNextServer();
+  let serverReady = true;
   if (!isDev) {
-    await waitForServer(getServerUrl());
+    // Probe the auth-exempt health endpoint (not the root URL, which may redirect).
+    serverReady = await waitForServer(`${getServerUrl()}/api/monitoring/health`);
   }
 
-  createWindow();
-  createTray();
+  if (isHeadless) {
+    console.log("[Electron] Headless mode active — UI window and tray icon skipped");
+  } else {
+    createWindow();
+    createTray();
+  }
+
   setupIpcHandlers();
   setupAutoUpdater();
+
+  // If readiness timed out (e.g. very long first-launch migrations), don't leave the
+  // window stuck on a hanging connection — keep polling and reload once it responds (#2460).
+  if (!isDev && !serverReady && !isHeadless) {
+    void waitForServer(`${getServerUrl()}/api/monitoring/health`, 300000).then((ready) => {
+      if (ready && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(getServerUrl());
+      }
+    });
+  }
 
   // Check for updates after a short delay (don't block startup)
   if (!isDev) {
@@ -729,6 +881,7 @@ app.whenReady().then(async () => {
 
   // macOS: recreate window when dock icon clicked
   app.on("activate", () => {
+    if (isHeadless) return;
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     } else if (mainWindow) {
@@ -739,7 +892,11 @@ app.whenReady().then(async () => {
 
 // Quit when all windows closed (except macOS)
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+  const isHeadless =
+    process.argv.includes("--headless") ||
+    process.argv.includes("--cli") ||
+    process.env.OMNIROUTE_HEADLESS === "true";
+  if (process.platform !== "darwin" && !isHeadless) {
     app.quit();
   }
 });

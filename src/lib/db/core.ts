@@ -567,6 +567,11 @@ function ensureUsageHistoryColumns(db: SqliteDatabase) {
       console.log("[DB] Added usage_history.service_tier column");
     }
     db.exec("CREATE INDEX IF NOT EXISTS idx_uh_service_tier ON usage_history(service_tier)");
+    if (!columnNames.has("combo_strategy")) {
+      db.exec("ALTER TABLE usage_history ADD COLUMN combo_strategy TEXT DEFAULT 'direct'");
+      console.log("[DB] Added usage_history.combo_strategy column");
+    }
+    db.exec("CREATE INDEX IF NOT EXISTS idx_uh_combo_strategy ON usage_history(combo_strategy)");
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn("[DB] Failed to verify usage_history schema:", message);
@@ -1109,6 +1114,7 @@ function startDbHealthCheckScheduler(db: SqliteDatabase) {
       if (!db.open) return;
       runDbHealthCheck(db, {
         autoRepair: true,
+        skipIntegrityCheck: process.env.OMNIROUTE_SKIP_DB_HEALTHCHECK === "1",
         expectedSchemaVersion: "1",
         createBackupBeforeRepair: () => createHealthCheckBackup(db),
       });
@@ -1361,9 +1367,14 @@ export function getDbInstance(): SqliteDatabase {
   );
   versionStmt.run();
   if (shouldRunStartupDbHealthCheck()) {
+    const skipIntegrityCheck = process.env.OMNIROUTE_SKIP_DB_HEALTHCHECK === "1";
+    if (skipIntegrityCheck) {
+      console.log("[DB] Health check skipped (OMNIROUTE_SKIP_DB_HEALTHCHECK=1)");
+    }
     runDbHealthCheck(db, {
       autoRepair: true,
       expectedSchemaVersion: "1",
+      skipIntegrityCheck,
       createBackupBeforeRepair: () => createHealthCheckBackup(db),
     });
   }

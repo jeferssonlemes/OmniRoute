@@ -284,7 +284,11 @@ function convertMessages(messages, tools, model) {
 
       // Handle tool role (from normalized)
       if (msg.role === "tool") {
-        const toolContent = typeof msg.content === "string" ? msg.content : "";
+        // Reuse the shared serializer so non-string content (arrays, structured/JSON
+        // blocks, images) is never collapsed to an empty string. CodeWhisperer rejects a
+        // toolResult whose content is [{ text: "" }] with 400 "Improperly formed request"
+        // — the same failure mode that hit the Anthropic tool_result path (issue #2446).
+        const toolContent = serializeToolResultContent(msg.content);
         pendingToolResults.push({
           toolUseId: msg.tool_call_id,
           status: "success",
@@ -742,8 +746,33 @@ export function buildKiroPayload(model, body, stream, credentials) {
   // upstream Kiro/AWS conversation context, leaking prior state across
   // sessions. See conversionMessages() above for the `__synthetic` marker.
   const NAMESPACE_KIRO = "34f7193f-561d-4050-bc84-9547d953d6bf";
+
+  // Priority 1: Extract first user message from pre-compression body (passed by chatCore before
+  // compressContext runs). This keeps conversationId stable even when compression alters content.
+  // Priority 2: Deterministic hash from first user message in translated history (fallback).
+  const preCompressionBody = credentials?._preCompressionBody as
+    | Record<string, unknown>
+    | null
+    | undefined;
+  const preCompressionMessages = Array.isArray(preCompressionBody?.messages)
+    ? preCompressionBody.messages
+    : null;
+  const preCompressionFirstUser = preCompressionMessages?.find(
+    (m: Record<string, unknown>) => m.role === "user"
+  );
+  const seedFromPreCompression = preCompressionFirstUser
+    ? typeof preCompressionFirstUser.content === "string"
+      ? preCompressionFirstUser.content
+      : Array.isArray(preCompressionFirstUser.content)
+        ? (preCompressionFirstUser.content as Array<{ type: string; text?: string }>)
+            .filter((b) => b.type === "text")
+            .map((b) => b.text || "")
+            .join(" ")
+        : ""
+    : "";
   const firstRealUserTurn = history.find((h) => h?.userInputMessage?.content && !h.__synthetic);
-  const firstContent = firstRealUserTurn?.userInputMessage?.content || finalContent;
+  const firstContent =
+    seedFromPreCompression || firstRealUserTurn?.userInputMessage?.content || finalContent;
 
   // Use uuidv5 with the hash of the system prompt / first message to maintain AWS Builder ID context cache
   payload.conversationState.conversationId = uuidv5(
