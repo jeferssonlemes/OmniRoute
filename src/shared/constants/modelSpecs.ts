@@ -183,6 +183,32 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
     aliases: ["kimi-k2.6-thinking", "kimi-for-coding"],
   },
 
+  // ── Kimi K2.5 (Moonshot — vision-capable via opencode-go / kimi-coding) ──
+  "kimi-k2.5": {
+    maxOutputTokens: 8192,
+    contextWindow: 200000,
+    supportsThinking: true,
+    supportsTools: true,
+    supportsVision: true,
+    aliases: ["kimi-k2.5-thinking"],
+  },
+
+  // ── Qwen3.x Plus (Bailian — multimodal text/image/video) ────────
+  "qwen3.6-plus": {
+    maxOutputTokens: 8192,
+    contextWindow: 200000,
+    supportsThinking: true,
+    supportsTools: true,
+    supportsVision: true,
+  },
+  "qwen3.5-plus": {
+    maxOutputTokens: 8192,
+    contextWindow: 200000,
+    supportsThinking: true,
+    supportsTools: true,
+    supportsVision: true,
+  },
+
   // ── Xiaomi MiMo V2.5 (1M context, consensus across 7+ sync sources) ──
   "mimo-v2.5-pro": {
     maxOutputTokens: 131072,
