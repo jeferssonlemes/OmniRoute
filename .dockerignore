@@ -47,13 +47,14 @@ blob-report
 # (English) sources at runtime, so translations are not required in the
 # container image.
 docs/i18n/**
-docs/screenshots/**
-# Note: SVG exports under docs/diagrams/exported/ are imported by several
-# Markdown pages via fumadocs-mdx (./docs/architecture/*.md,
-# ./docs/routing/AUTO-COMBO.md, ./docs/frameworks/{MCP-SERVER,CLOUD_AGENT}.md,
-# ./docs/guides/I18N.md). Excluding them breaks `next build` with
-# "Module not found: Can't resolve '../diagrams/exported/*.svg'".
-# Keep raster excludes (PNG/JPG/etc) — they're not referenced and weigh more.
+# Note: SVG exports under docs/diagrams/exported/ and screenshots under
+# docs/screenshots/ are imported by Markdown pages via fumadocs-mdx
+# (architecture/AUTHZ/RESILIENCE/CODEBASE_DOCUMENTATION, routing/AUTO-COMBO,
+# frameworks/MCP-SERVER, frameworks/CLOUD_AGENT, guides/I18N, guides/FEATURES).
+# Excluding them breaks `next build` with "Module not found: Can't resolve
+# '../diagrams/exported/*.svg'" or "'../screenshots/*.png'".
+# Raster diagram excludes (.png/.jpg/...) stay because no Markdown
+# references them and they're heavier than the referenced screenshots.
 docs/diagrams/**/*.png
 docs/diagrams/**/*.jpg
 docs/diagrams/**/*.jpeg
