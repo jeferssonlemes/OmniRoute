@@ -48,13 +48,17 @@ blob-report
 # container image.
 docs/i18n/**
 docs/screenshots/**
-docs/diagrams/exported/**
+# Note: SVG exports under docs/diagrams/exported/ are imported by several
+# Markdown pages via fumadocs-mdx (./docs/architecture/*.md,
+# ./docs/routing/AUTO-COMBO.md, ./docs/frameworks/{MCP-SERVER,CLOUD_AGENT}.md,
+# ./docs/guides/I18N.md). Excluding them breaks `next build` with
+# "Module not found: Can't resolve '../diagrams/exported/*.svg'".
+# Keep raster excludes (PNG/JPG/etc) — they're not referenced and weigh more.
 docs/diagrams/**/*.png
 docs/diagrams/**/*.jpg
 docs/diagrams/**/*.jpeg
 docs/diagrams/**/*.gif
 docs/diagrams/**/*.webp
-docs/diagrams/**/*.svg
 # Note: `*.md` matches the root only (Go filepath.Match does not cross /),
 # so nested docs/**/*.md is implicitly kept without a re-include rule.
 *.md
