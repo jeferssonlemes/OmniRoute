@@ -1036,6 +1036,31 @@ export class BaseExecutor {
         };
         if (combinedSignal) fetchOptions.signal = combinedSignal;
 
+        // [DEBUG-CHATLABEL] Gated upstream body dump for opencode-go qwen3.x
+        // diagnosis (400 "Request body format invalid"). Set
+        // DEBUG_OPENCODE_GO_QWEN_BODY=1 in the StatefulSet to enable.
+        // Logs ~5KB of the outgoing body + headers (api key redacted).
+        // Remove once root cause is identified.
+        if (
+          process.env.DEBUG_OPENCODE_GO_QWEN_BODY === "1" &&
+          this.provider === "opencode-go" &&
+          /^qwen3\./.test(String((transformedBody as { model?: string })?.model ?? ""))
+        ) {
+          const redactedHeaders: Record<string, string> = {};
+          for (const [k, v] of Object.entries(finalHeaders)) {
+            const lk = k.toLowerCase();
+            redactedHeaders[k] =
+              lk === "authorization" || lk === "x-api-key" ? "<redacted>" : String(v);
+          }
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[DEBUG-CHATLABEL] opencode-go qwen upstream → ${url}\n` +
+              `headers=${JSON.stringify(redactedHeaders)}\n` +
+              `body[0..5000]=${bodyString.slice(0, 5000)}` +
+              (bodyString.length > 5000 ? `\n…(truncated, total=${bodyString.length} bytes)` : "")
+          );
+        }
+
         let response;
         try {
           response = await fetch(url, fetchOptions);
@@ -1044,6 +1069,26 @@ export class BaseExecutor {
             clearTimeout(timeoutId);
             timeoutId = null;
           }
+        }
+
+        // [DEBUG-CHATLABEL] On 400 from opencode-go qwen, dump upstream response
+        // body so we see the exact validation error returned by the proxy.
+        if (
+          process.env.DEBUG_OPENCODE_GO_QWEN_BODY === "1" &&
+          this.provider === "opencode-go" &&
+          response.status === 400 &&
+          /^qwen3\./.test(String((transformedBody as { model?: string })?.model ?? ""))
+        ) {
+          const peek = await response
+            .clone()
+            .text()
+            .catch(() => "<unreadable>");
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[DEBUG-CHATLABEL] opencode-go qwen upstream ← 400\n` +
+              `response[0..2000]=${peek.slice(0, 2000)}` +
+              (peek.length > 2000 ? `\n…(truncated, total=${peek.length} bytes)` : "")
+          );
         }
 
         // Intra-URL retry: if 429 and we haven't exhausted per-URL retries, wait and retry the same URL
