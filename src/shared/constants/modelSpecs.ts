@@ -194,6 +194,13 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
   },
 
   // ── Qwen3.x Plus (Bailian — multimodal text/image/video) ────────
+  "qwen3.7-max": {
+    maxOutputTokens: 8192,
+    contextWindow: 200000,
+    supportsThinking: true,
+    supportsTools: true,
+    supportsVision: true,
+  },
   "qwen3.6-plus": {
     maxOutputTokens: 8192,
     contextWindow: 200000,
@@ -219,6 +226,12 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
   "mimo-v2.5": {
     maxOutputTokens: 131072,
     contextWindow: 1048576,
+    supportsTools: true,
+    supportsVision: true,
+  },
+  "mimo-v2-pro": {
+    maxOutputTokens: 131072,
+    contextWindow: 262144,
     supportsTools: true,
     supportsVision: true,
   },
