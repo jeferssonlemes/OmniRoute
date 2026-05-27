@@ -213,8 +213,6 @@ describe("OpencodeExecutor", () => {
       registerModel("opencode-go", { id: "kimi-k2.6", name: "Kimi K2.6" });
       registerModel("opencode-go", { id: "mimo-v2-pro", name: "MiMo V2 Pro" });
       registerModel("opencode-go", { id: "mimo-v2-omni", name: "MiMo V2 Omni" });
-      registerModel("opencode-go", { id: "qwen3.6-plus", name: "Qwen 3.6 Plus" });
-      registerModel("opencode-go", { id: "qwen3.5-plus", name: "Qwen 3.5 Plus" });
 
       // glm-5.1
       const glm51 = await goExecutor.execute(createInput("glm-5.1"));
@@ -231,14 +229,6 @@ describe("OpencodeExecutor", () => {
       // mimo-v2-omni
       const mimoOmni = await goExecutor.execute(createInput("mimo-v2-omni"));
       assert.equal(mimoOmni.url, "https://opencode.ai/zen/go/v1/chat/completions");
-
-      // qwen3.6-plus
-      const qwen36 = await goExecutor.execute(createInput("qwen3.6-plus"));
-      assert.equal(qwen36.url, "https://opencode.ai/zen/go/v1/chat/completions");
-
-      // qwen3.5-plus
-      const qwen35 = await goExecutor.execute(createInput("qwen3.5-plus"));
-      assert.equal(qwen35.url, "https://opencode.ai/zen/go/v1/chat/completions");
     });
 
     it("builds bearer auth headers for opencode-go openai models", async () => {
@@ -256,14 +246,9 @@ describe("OpencodeExecutor", () => {
 
     it("routes opencode-go catalog-only models to chat completions", async () => {
       // Register new models
-      registerModel("opencode-go", { id: "qwen3.7-max", name: "Qwen3.7 Max" });
       registerModel("opencode-go", { id: "mimo-v2-pro", name: "MiMo-V2-Pro" });
       registerModel("opencode-go", { id: "mimo-v2-omni", name: "MiMo-V2-Omni" });
       registerModel("opencode-go", { id: "hy3-preview", name: "Hunyuan3 Preview" });
-
-      // qwen3.7-max
-      const qwen37 = await goExecutor.execute(createInput("qwen3.7-max"));
-      assert.equal(qwen37.url, "https://opencode.ai/zen/go/v1/chat/completions");
 
       // mimo-v2-pro
       const mimoPro = await goExecutor.execute(createInput("mimo-v2-pro"));
@@ -276,6 +261,43 @@ describe("OpencodeExecutor", () => {
       // hy3-preview
       const hy3 = await goExecutor.execute(createInput("hy3-preview"));
       assert.equal(hy3.url, "https://opencode.ai/zen/go/v1/chat/completions");
+    });
+
+    it("routes opencode-go qwen models to claude messages endpoint", async () => {
+      // Issue #2292: Qwen on opencode-go rejects oa-compat ("Model qwen3.x-*
+      // is not supported for format oa-compat"). Force targetFormat: claude
+      // so they route through /messages, mirroring opencode-zen behavior.
+      registerModel("opencode-go", {
+        id: "qwen3.7-max",
+        name: "Qwen3.7 Max",
+        targetFormat: "claude",
+      });
+      registerModel("opencode-go", {
+        id: "qwen3.6-plus",
+        name: "Qwen3.6 Plus",
+        targetFormat: "claude",
+      });
+      registerModel("opencode-go", {
+        id: "qwen3.5-plus",
+        name: "Qwen3.5 Plus",
+        targetFormat: "claude",
+      });
+
+      const qwen37 = await goExecutor.execute(
+        createInput("qwen3.7-max", true, { apiKey: "claude-key" })
+      );
+      assert.equal(qwen37.url, "https://opencode.ai/zen/go/v1/messages");
+      assert.equal(qwen37.headers["anthropic-version"], "2023-06-01");
+
+      const qwen36 = await goExecutor.execute(
+        createInput("qwen3.6-plus", true, { apiKey: "claude-key" })
+      );
+      assert.equal(qwen36.url, "https://opencode.ai/zen/go/v1/messages");
+
+      const qwen35 = await goExecutor.execute(
+        createInput("qwen3.5-plus", true, { apiKey: "claude-key" })
+      );
+      assert.equal(qwen35.url, "https://opencode.ai/zen/go/v1/messages");
     });
   });
 
