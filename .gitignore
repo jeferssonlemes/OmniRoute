@@ -22,6 +22,10 @@ memory-bank/
 # Draft features documentation (internal only)
 docs/new-features/
 
+# Local-only Dockerfile used to rebuild a diagnosis image without the
+# production heap pinning. Keep out of CI / upstream PRs.
+Dockerfile.local
+
 # dependencies
 node_modules/
 /.pnp
