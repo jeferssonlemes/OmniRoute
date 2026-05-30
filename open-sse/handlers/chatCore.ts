@@ -996,6 +996,50 @@ function getHeaderValueCaseInsensitive(
   return null;
 }
 
+/**
+ * Resolve a stable conversation/session id for call-log analytics, covering as
+ * many client shapes as possible. Different clients expose the session in
+ * different places (verified against stored ClickHouse bodies):
+ *   1. Claude Code  → `x-claude-code-session-id` header
+ *   2. OpenCode     → `x-opencode-session` header
+ *   3. Claude body  → `metadata.user_id` (JSON string) → `.session_id`
+ *   4. Codex body   → `prompt_cache_key` / `session_id` / `conversation_id`
+ * Returns null when no signal is present (e.g. generic SDK callers).
+ */
+function resolveChatLogSessionId(
+  headers: Record<string, unknown> | Headers | null | undefined,
+  body: Record<string, unknown> | null | undefined
+): string | null {
+  const headerSid =
+    getHeaderValueCaseInsensitive(headers, "x-claude-code-session-id") ||
+    getHeaderValueCaseInsensitive(headers, "x-opencode-session");
+  if (headerSid) return headerSid;
+
+  if (body && typeof body === "object") {
+    // Claude embeds identity as a JSON string under metadata.user_id.
+    const metadata = body.metadata as Record<string, unknown> | undefined;
+    const rawUserId = metadata?.user_id;
+    if (typeof rawUserId === "string" && rawUserId.trim()) {
+      try {
+        const parsed = JSON.parse(rawUserId) as { session_id?: unknown };
+        if (typeof parsed.session_id === "string" && parsed.session_id.trim()) {
+          return parsed.session_id.trim();
+        }
+      } catch {
+        // Not JSON — fall through to other signals.
+      }
+    }
+
+    // Codex-style per-conversation identifiers live at the body root.
+    for (const key of ["prompt_cache_key", "session_id", "conversation_id"]) {
+      const value = body[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+
+  return null;
+}
+
 function toFiniteNumberOrNull(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -1875,6 +1919,10 @@ export async function handleChatCore({
           clientRawRequest?.headers ?? null,
           "x-omniroute-session-id"
         )) || skillRequestId;
+  const chatLogSessionId = resolveChatLogSessionId(
+    clientRawRequest?.headers ?? null,
+    (body as Record<string, unknown>) ?? null
+  );
   const persistAttemptLogs = ({
     status,
     tokens,
@@ -1981,6 +2029,7 @@ export async function handleChatCore({
       apiKeyName: apiKeyInfo?.name || null,
       noLog: noLogEnabled,
       pipelinePayloads,
+      sessionId: chatLogSessionId,
     }).catch(() => {});
   };
 

@@ -11,6 +11,13 @@
  *   CLICKHOUSE_LOG_FULL_BODY — "true" to log raw request/response payloads
  *   CLICKHOUSE_BATCH_SIZE    — rows per flush (default 100)
  *   CLICKHOUSE_FLUSH_MS      — max ms before flush (default 5000)
+ *
+ * Per-turn storage: clients re-send the whole thread each request, so the
+ * `messages` column stores only this turn's delta (messages after the last
+ * assistant), not the full array. Combined with `session_id` (resolved per
+ * client from headers or request body — see resolveChatLogSessionId in
+ * chatCore.ts), the full history is rebuilt by ordering a session's rows and
+ * concatenating `messages` + `response`. See extractTurnDelta() below.
  */
 
 const CH_URL = (process.env.CLICKHOUSE_URL || "http://clickhouse.omniroute.svc.cluster.local:8123").replace(/\/$/, "");
@@ -26,6 +33,7 @@ const MAX_BUFFER = BATCH_SIZE * 5; // hard ceiling to prevent unbounded growth
 
 interface ChRow {
   request_id: string;
+  session_id: string;
   timestamp: string;
   api_key_id: string;
   model: string;
@@ -89,6 +97,7 @@ async function ensureTable(): Promise<void> {
   const ddl = `
 CREATE TABLE IF NOT EXISTS ${TABLE} (
     request_id String,
+    session_id LowCardinality(String) DEFAULT '',
     timestamp DateTime64(3) CODEC(Delta, LZ4),
     api_key_id LowCardinality(String),
     model LowCardinality(String),
@@ -109,6 +118,8 @@ TTL toDateTime(timestamp) + INTERVAL 7 DAY
 SETTINGS index_granularity = 8192
 `.trim();
   await chExec(ddl);
+  // Existing deployments: add session_id without recreating the table (idempotent).
+  await chExec(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS session_id LowCardinality(String) DEFAULT ''`);
 }
 
 async function flushBuffer(): Promise<void> {
@@ -170,6 +181,44 @@ function safeJson(value: unknown, fallback = "<serialize-failed>"): string {
   }
 }
 
+/**
+ * Extract only the NEW messages for this turn instead of the whole thread.
+ *
+ * Clients re-send the entire conversation on every request, so logging the
+ * full `messages` array duplicates the thread on each turn (O(N²) storage).
+ * The only genuinely new content per turn is whatever follows the last
+ * `assistant` message (the fresh user prompt, occasionally a trailing system
+ * reminder). The assistant's reply for this turn is already captured in the
+ * `response` column. Reconstruct a full history by ordering a session's rows
+ * and concatenating `messages` + `response` per row.
+ *
+ * The first turn has no prior assistant message, so the full opening context
+ * (system + first user) is stored once — which is correct.
+ */
+function extractTurnDelta(requestBody: unknown): string {
+  const body = requestBody as { messages?: unknown } | null | undefined;
+  const msgs = body?.messages;
+  if (!Array.isArray(msgs) || msgs.length === 0) return safeJson(requestBody);
+
+  // Drop the synthetic truncation marker the chat logger prepends to long arrays.
+  const first = msgs[0] as Record<string, unknown> | null;
+  const items =
+    first && typeof first === "object" && first._omniroute_truncated_array ? msgs.slice(1) : msgs;
+  if (items.length === 0) return "[]";
+
+  let lastAssistantIdx = -1;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const role = (items[i] as { role?: unknown } | null)?.role;
+    if (role === "assistant") {
+      lastAssistantIdx = i;
+      break;
+    }
+  }
+
+  const delta = lastAssistantIdx >= 0 ? items.slice(lastAssistantIdx + 1) : items;
+  return safeJson(delta);
+}
+
 /** Call once at server startup. Idempotent. */
 export async function initClickHouseLogger(): Promise<void> {
   if (_state.initialized || _state.initError) return;
@@ -193,8 +242,13 @@ export function emitClickHouseLog(entry: Record<string, any>): void {
   const duration = typeof entry.duration === "number" ? entry.duration : 0;
   const status = typeof entry.status === "number" ? entry.status : 0;
 
-  const messages = LOG_FULL_BODY ? safeJson(entry.requestBody) : "";
-  const response = LOG_FULL_BODY ? safeJson(entry.responseBody) : "";
+  // Honor the same no-log gate as the SQLite path (callLogs.ts): when the API
+  // key opts out of payload logging, never mirror request/response bodies to
+  // ClickHouse. Scalar metrics (tokens, cost, status) are still recorded.
+  const noLog = Boolean(entry.noLog);
+  const logBodies = LOG_FULL_BODY && !noLog;
+  const messages = logBodies ? extractTurnDelta(entry.requestBody) : "";
+  const response = logBodies ? safeJson(entry.responseBody) : "";
   const error = entry.error ? safeJson(entry.error) : "";
 
   // ClickHouse JSONEachRow DateTime64 does not accept ISO 8601 (`T`/`Z`).
@@ -204,6 +258,7 @@ export function emitClickHouseLog(entry: Record<string, any>): void {
 
   const row: ChRow = {
     request_id: String(entry.id || entry.requestId || "unknown"),
+    session_id: String(entry.sessionId || ""),
     timestamp: chTimestamp,
     api_key_id: String(entry.apiKeyId || "unknown"),
     model: String(entry.model || entry.requestedModel || "unknown"),
