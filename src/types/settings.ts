@@ -1,3 +1,4 @@
+import type { HideableSidebarGroupId } from "@/shared/constants/sidebarGroupVisibility";
 import type {
   HideableSidebarItemId,
   SidebarItemOrder,
@@ -29,10 +30,14 @@ export interface Settings {
   hideEndpointCloudflaredTunnel?: boolean;
   hideEndpointTailscaleFunnel?: boolean;
   hideEndpointNgrokTunnel?: boolean;
+  preferClaudeCodeForUnprefixedClaudeModels?: boolean;
+  autoRefreshProviderQuota?: boolean;
+  autoRefreshProviderQuotaInterval?: number;
   pinProviderQuotaToHome?: boolean;
   showQuickStartOnHome?: boolean;
   showProviderTopologyOnHome?: boolean;
   hiddenSidebarItems?: HideableSidebarItemId[];
+  hiddenSidebarGroupLabels?: HideableSidebarGroupId[];
   sidebarSectionOrder?: SidebarSectionId[];
   sidebarItemOrder?: SidebarItemOrder;
   sidebarActivePreset?: SidebarPresetId;
@@ -52,6 +57,7 @@ export interface ComboDefaults {
   fallbackDelayMs?: number;
   maxComboDepth: number;
   trackMetrics: boolean;
+  reasoningTokenBufferEnabled?: boolean;
   concurrencyPerModel?: number;
   queueTimeoutMs?: number;
   handoffThreshold?: number;

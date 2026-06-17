@@ -6,6 +6,7 @@ import { createKeySchema } from "@/shared/validation/schemas";
 import { isValidationFailure, validateBody } from "@/shared/validation/helpers";
 import { isApiKeyRevealEnabled, maskStoredApiKey } from "@/lib/apiKeyExposure";
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
+import { normalizeSelfServiceScopesForCreate } from "@/shared/constants/selfServiceScopes";
 import * as log from "@/sse/utils/logger";
 
 function parsePagination(request: Request) {
@@ -62,13 +63,17 @@ export async function POST(request) {
     if (isValidationFailure(validation)) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
     }
-    const { name, noLog, scopes } = validation.data;
+    const { name, noLog, scopes, allowUsageCommand } = validation.data;
 
     // Always get machineId from server
     const machineId = await getConsistentMachineId();
-    const apiKey = await createApiKey(name, machineId, scopes ?? []);
-    if (noLog === true) {
-      await updateApiKeyPermissions(apiKey.id, { noLog: true });
+    const normalizedScopes = normalizeSelfServiceScopesForCreate(scopes);
+    const apiKey = await createApiKey(name, machineId, normalizedScopes);
+    if (noLog === true || allowUsageCommand === true) {
+      await updateApiKeyPermissions(apiKey.id, {
+        ...(noLog === true && { noLog: true }),
+        ...(allowUsageCommand === true && { allowUsageCommand: true }),
+      });
     }
 
     // Auto sync to Cloud if enabled
@@ -81,6 +86,8 @@ export async function POST(request) {
         id: apiKey.id,
         machineId: apiKey.machineId,
         noLog: noLog === true,
+        allowUsageCommand: allowUsageCommand === true,
+        streamDefaultMode: "legacy",
       },
       { status: 201 }
     );

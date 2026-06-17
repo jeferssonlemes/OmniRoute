@@ -6,6 +6,7 @@ import path from "node:path";
 const providerLimitUtils =
   await import("../../src/app/(dashboard)/dashboard/usage/components/ProviderLimits/utils.tsx");
 const providerConstants = await import("../../src/shared/constants/providers.ts");
+const settingsSchemas = await import("../../src/shared/validation/settingsSchemas.ts");
 
 test("provider plan fallbacks normalize to Unknown instead of repeating provider labels", () => {
   const tier = providerLimitUtils.normalizePlanTier("Claude Code");
@@ -107,6 +108,35 @@ test("remaining percentage helpers reflect remaining quota and stale resets refi
 
   assert.equal(parsed.length, 1);
   assert.equal(providerLimitUtils.calculatePercentage(parsed[0].used, parsed[0].total), 100);
+});
+
+test("percentage-only quotas hide redundant usage counts while counted quotas keep them", () => {
+  const codex = providerLimitUtils.parseQuotaData("codex", {
+    quotas: {
+      session: { used: 7, total: 100, remainingPercentage: 93 },
+      weekly: { used: 28, total: 100, remainingPercentage: 72 },
+    },
+  });
+
+  assert.equal(codex.length, 2);
+  assert.equal(codex[0].isPercentageOnly, true);
+  assert.equal(providerLimitUtils.shouldShowQuotaUsageCount(codex[0]), false);
+  assert.equal(providerLimitUtils.shouldShowQuotaUsageCount(codex[1]), false);
+
+  const counted = providerLimitUtils.parseQuotaData("kimi-coding", {
+    quotas: {
+      Weekly: {
+        used: 28,
+        total: 100,
+        remaining: 72,
+        remainingPercentage: 72,
+      },
+    },
+  });
+
+  assert.equal(counted.length, 1);
+  assert.equal(counted[0].isPercentageOnly, undefined);
+  assert.equal(providerLimitUtils.shouldShowQuotaUsageCount(counted[0]), true);
 });
 
 test("quota labels normalize session and weekly windows while preserving readable titles", () => {
@@ -222,4 +252,13 @@ test("usage namespace includes Provider Limits UI translation keys", () => {
     assert.equal(typeof usage[key], "string", `usage.${key} should be defined in en.json`);
     assert.ok(!usage[key].startsWith("__MISSING__:"), `usage.${key} should not be a placeholder`);
   }
+});
+
+test("provider quota auto-refresh settings are accepted by the settings schema", () => {
+  const result = settingsSchemas.updateSettingsSchema.safeParse({
+    autoRefreshProviderQuota: true,
+    autoRefreshProviderQuotaInterval: 180,
+  });
+
+  assert.equal(result.success, true);
 });

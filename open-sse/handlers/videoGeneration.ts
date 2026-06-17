@@ -17,6 +17,8 @@
 
 import { getVideoProvider, parseVideoModel } from "../config/videoRegistry.ts";
 import { kieExecutor } from "../executors/kie.ts";
+import { vertexGenerateVideo } from "../executors/vertexMedia.ts";
+import { getExecutor } from "../executors/index.ts";
 import { isJsonObject, parseKieResultJson } from "../utils/kieTask.ts";
 import {
   buildRunwayApiUrl,
@@ -55,6 +57,10 @@ export async function handleVideoGeneration({ body, credentials, log }) {
     };
   }
 
+  if (providerConfig.format === "vertex-veo") {
+    return handleVertexVeoGeneration({ model, body, credentials, log });
+  }
+
   if (providerConfig.format === "comfyui") {
     return handleComfyUIVideoGeneration({ model, provider, providerConfig, body, log });
   }
@@ -74,6 +80,11 @@ export async function handleVideoGeneration({ body, credentials, log }) {
   if (providerConfig.format === "haiper-video") {
     return handleHaiperVideoGeneration({ model, provider, providerConfig, body, credentials, log });
   }
+
+  if (providerConfig.format === "veoaifree-web") {
+    return handleVeoAiFreeVideoGeneration({ model, provider, body, credentials, log });
+  }
+
   if (providerConfig.format === "leonardo-video") {
     return handleLeonardoVideoGeneration({
       model,
@@ -93,9 +104,98 @@ export async function handleVideoGeneration({ body, credentials, log }) {
 }
 
 /**
+ * Veo video generation via Vertex AI (predictLongRunning → poll → MP4).
+ * Uses the Vertex chat credentials (Service Account JSON or Express key).
+ */
+async function handleVertexVeoGeneration({ model, body, credentials, log }) {
+  try {
+    const aspectRatio =
+      typeof body.aspect_ratio === "string"
+        ? body.aspect_ratio
+        : typeof body.aspectRatio === "string"
+          ? body.aspectRatio
+          : typeof body.size === "string"
+            ? body.size
+            : undefined;
+    const durationSeconds =
+      typeof body.duration === "number"
+        ? body.duration
+        : typeof body.durationSeconds === "number"
+          ? body.durationSeconds
+          : undefined;
+
+    const result = await vertexGenerateVideo(credentials, {
+      model,
+      prompt: String(body.prompt ?? ""),
+      aspectRatio,
+      durationSeconds,
+      negativePrompt: typeof body.negative_prompt === "string" ? body.negative_prompt : undefined,
+    });
+
+    const item = result.base64
+      ? { b64_json: result.base64, format: result.format }
+      : { url: result.url, format: result.format };
+
+    return {
+      success: true,
+      data: { created: Math.floor(Date.now() / 1000), data: [item] },
+    };
+  } catch (err: any) {
+    log?.error?.("VIDEO", `Vertex Veo generation failed: ${err?.message}`);
+    return {
+      success: false,
+      status: typeof err?.status === "number" ? err.status : 502,
+      error: sanitizeErrorMessage(err?.message || "Vertex Veo generation failed"),
+    };
+  }
+}
+
+/**
  * Handle ComfyUI video generation
  * Submits an AnimateDiff or SVD workflow, polls for completion, fetches output video
  */
+async function handleVeoAiFreeVideoGeneration({ model, provider, body, credentials, log }) {
+  const executor = getExecutor(provider);
+  if (!executor) {
+    return { success: false, status: 400, error: `Unknown video provider: ${provider}` };
+  }
+
+  const prompt = String(body.prompt ?? "");
+  const systemParts = [];
+  if (body.size) systemParts.push(`aspect_ratio: ${body.size}`);
+  if (body.aspect_ratio) systemParts.push(`aspect_ratio: ${body.aspect_ratio}`);
+
+  const response = await executor.execute({
+    model,
+    body: {
+      ...body,
+      model: `${provider}/${model}`,
+      messages: [
+        ...(systemParts.length > 0 ? [{ role: "system", content: systemParts.join("\n") }] : []),
+        { role: "user", content: prompt },
+      ],
+    },
+    stream: false,
+    credentials: credentials || { connectionId: "noauth" },
+    signal: null,
+    log,
+  });
+
+  const upstreamResponse = response instanceof Response ? response : response.response;
+  if (!upstreamResponse.ok) {
+    return {
+      success: false,
+      status: upstreamResponse.status || 502,
+      error: await upstreamResponse.text().catch(() => "Video provider error"),
+    };
+  }
+
+  return {
+    success: true,
+    data: await upstreamResponse.json(),
+  };
+}
+
 async function handleComfyUIVideoGeneration({ model, provider, providerConfig, body, log }) {
   const startTime = Date.now();
   const [width, height] = (body.size || "512x512").split("x").map(Number);

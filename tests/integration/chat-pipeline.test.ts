@@ -606,6 +606,47 @@ test("chat pipeline persists Codex responses cache and reasoning tokens to call 
   assert.equal(callLog.tokens.reasoning, 13);
 });
 
+test("chat pipeline applies global Codex priority service tier inside combos", async () => {
+  await seedConnection("codex", { apiKey: "sk-codex-combo-priority" });
+  await settingsDb.updateSettings({
+    codexServiceTier: { enabled: true, tier: "priority" },
+  });
+  await combosDb.createCombo({
+    name: "codex-priority-combo",
+    strategy: "priority",
+    config: { maxRetries: 0, retryDelayMs: 0 },
+    models: ["codex/gpt-5.5"],
+  });
+  const fetchCalls = [];
+
+  globalThis.fetch = async (url, init: RequestInit = {}) => {
+    fetchCalls.push({
+      url: String(url),
+      headers: toPlainHeaders(init.headers),
+      body: init.body ? JSON.parse(String(init.body)) : null,
+    });
+    return buildOpenAIResponsesSSE({ text: "combo priority ok", model: "gpt-5.5" });
+  };
+
+  const response = await handleChat(
+    buildRequest({
+      body: {
+        model: "codex-priority-combo",
+        stream: false,
+        messages: [{ role: "user", content: "Use Codex combo priority" }],
+      },
+    })
+  );
+
+  const json = (await response.json()) as any;
+  assert.equal(response.status, 200);
+  assert.equal(fetchCalls.length, 1);
+  assert.match(fetchCalls[0].url, /\/responses$/);
+  assert.equal(fetchCalls[0].headers.Authorization, "Bearer sk-codex-combo-priority");
+  assert.equal(fetchCalls[0].body.service_tier, "priority");
+  assert.equal(json.choices[0].message.content, "combo priority ok");
+});
+
 test("chat pipeline applies Codex CLI fingerprint to OAuth responses requests", async () => {
   setCliCompatProviders(["codex"]);
   await seedConnection("codex", {
@@ -685,6 +726,85 @@ test("chat pipeline applies Codex CLI fingerprint to OAuth responses requests", 
     call.body.client_metadata["x-codex-installation-id"],
     "11111111-1111-4111-a111-111111111111"
   );
+});
+
+test("chat pipeline strips previous_response_id from stateless Codex responses by default", async () => {
+  await seedConnection("codex", {
+    apiKey: "sk-codex-stateless-responses",
+    providerSpecificData: { openaiStoreEnabled: false },
+  });
+  const fetchCalls = [];
+
+  globalThis.fetch = async (url, init: RequestInit = {}) => {
+    fetchCalls.push({
+      url: String(url),
+      headers: toPlainHeaders(init.headers),
+      body: init.body ? JSON.parse(String(init.body)) : null,
+    });
+    return buildOpenAIResponsesSSE({ text: "stateless responses ok", model: "gpt-5.5" });
+  };
+
+  const response = await handleChat(
+    buildRequest({
+      url: "http://localhost/v1/responses",
+      body: {
+        model: "codex/gpt-5.5",
+        stream: false,
+        previous_response_id: "resp_vs_code_prev",
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Second VS Code turn" }],
+          },
+        ],
+      },
+    })
+  );
+
+  await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchCalls.length, 1);
+  assert.match(fetchCalls[0].url, /\/responses$/);
+  assert.equal(fetchCalls[0].body.previous_response_id, undefined);
+  assert.equal(fetchCalls[0].body.store, false);
+});
+
+test("chat pipeline preserve mode forwards previous_response_id for responses requests", async () => {
+  await settingsDb.updateSettings({ responsesPreviousResponseIdMode: "preserve" });
+  await seedConnection("codex", {
+    apiKey: "sk-codex-preserve-responses",
+    providerSpecificData: { openaiStoreEnabled: false },
+  });
+  const fetchCalls = [];
+
+  globalThis.fetch = async (url, init: RequestInit = {}) => {
+    fetchCalls.push({
+      url: String(url),
+      headers: toPlainHeaders(init.headers),
+      body: init.body ? JSON.parse(String(init.body)) : null,
+    });
+    return buildOpenAIResponsesSSE({ text: "preserve responses ok", model: "gpt-5.5" });
+  };
+
+  const response = await handleChat(
+    buildRequest({
+      url: "http://localhost/v1/responses",
+      body: {
+        model: "codex/gpt-5.5",
+        stream: false,
+        previous_response_id: "resp_preserved_prev",
+        input: "Second stateful turn",
+      },
+    })
+  );
+
+  await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fetchCalls[0].body.previous_response_id, "resp_preserved_prev");
 });
 
 test("chat pipeline treats Codex /responses/compact as non-streaming JSON", async () => {
@@ -950,12 +1070,7 @@ test("chat pipeline sends Gemini CLI OAuth requests with native Cloud Code trans
   assert.equal(generateCall.body.requestId, undefined);
   assert.equal(generateCall.body.user_prompt_id, generateCall.body.request.session_id);
   const keys = Object.keys(generateCall.body).slice(0, 4);
-  assert.deepEqual(keys.sort(), [
-    "model",
-    "project",
-    "request",
-    "user_prompt_id",
-  ]);
+  assert.deepEqual(keys.sort(), ["model", "project", "request", "user_prompt_id"]);
   assert.equal(generateCall.body.request.sessionId, undefined);
   assert.match(generateCall.body.request.session_id, /^[0-9a-f-]{36}$/i);
   assert.equal(generateCall.body.request.contents.at(-1).parts[0].text, "Hello Gemini CLI");

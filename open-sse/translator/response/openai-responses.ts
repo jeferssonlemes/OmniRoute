@@ -4,9 +4,38 @@
  */
 import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
+import { appendToolCallArgumentDelta } from "../../utils/toolCallArguments.ts";
 
 function normalizeToolName(value) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function stripEmptyOptionalToolArgs(value, toolName) {
+  if (value == null) return value;
+
+  if (typeof value === "string") {
+    // JSON-string cleanup is intentionally scoped to Claude Code's Read tool.
+    // For arbitrary tools, empty strings/arrays may be valid user payloads.
+    if (toolName !== "Read") return value;
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed) || typeof parsed !== "object" || parsed === null) return value;
+      const cleaned = stripEmptyOptionalToolArgs(parsed, toolName);
+      return JSON.stringify(cleaned ?? {});
+    } catch {
+      return value;
+    }
+  }
+
+  if (Array.isArray(value) || typeof value !== "object") return value;
+
+  const cleaned = { ...value };
+  for (const [key, entry] of Object.entries(cleaned)) {
+    if (entry === "" || (Array.isArray(entry) && entry.length === 0)) {
+      delete cleaned[key];
+    }
+  }
+  return cleaned;
 }
 
 /**
@@ -320,15 +349,19 @@ function emitToolCall(state, emit, tc) {
 
   if (tc.function?.arguments) {
     const refCallId = state.funcCallIds[tcIdx] || newCallId;
-    if (refCallId) {
+    const existingArgs = state.funcArgsBuf[tcIdx] || "";
+    const nextArgs = appendToolCallArgumentDelta(existingArgs, tc.function.arguments);
+    const emittedDelta = nextArgs.slice(existingArgs.length);
+    state.funcArgsBuf[tcIdx] = nextArgs;
+
+    if (refCallId && emittedDelta) {
       emit("response.function_call_arguments.delta", {
         type: "response.function_call_arguments.delta",
         item_id: `fc_${refCallId}`,
         output_index: tcIdx,
-        delta: tc.function.arguments,
+        delta: emittedDelta,
       });
     }
-    state.funcArgsBuf[tcIdx] += tc.function.arguments;
   }
 }
 
@@ -458,10 +491,35 @@ function normalizeUpstreamFailure(data, fallbackType = "server_error") {
 }
 
 /**
+ * OpenAI Chat Completions streams announce the assistant role on the FIRST delta
+ * (e.g. `{ "role": "assistant", "content": "" }` or `{ "role": "assistant",
+ * "tool_calls": [...] }`). The Responses API has no role-announcement event, so when
+ * translating Responses → Chat we must synthesize it on the first emitted chunk.
+ *
+ * Strict streaming clients — notably @langchain/openai's `_convertDeltaToMessageChunk`
+ * (used by n8n's AI Agent) — key off the first chunk's role to build an AIMessageChunk.
+ * Without it, streamed tool_call deltas are dropped and the agent returns an empty
+ * response, even though the underlying tool call is well-formed.
+ */
+function withAssistantRoleOnFirstDelta(state, result) {
+  if (!result || state.roleEmitted) return result;
+  const delta = result.choices?.[0]?.delta;
+  if (delta && typeof delta === "object" && !Array.isArray(delta)) {
+    delta.role = "assistant";
+    state.roleEmitted = true;
+  }
+  return result;
+}
+
+/**
  * Translate OpenAI Responses API chunk to OpenAI Chat Completions format
  * This is for when Codex returns data and we need to send it to an OpenAI-compatible client
  */
 export function openaiResponsesToOpenAIResponse(chunk, state) {
+  return withAssistantRoleOnFirstDelta(state, openaiResponsesToOpenAIResponseStream(chunk, state));
+}
+
+function openaiResponsesToOpenAIResponseStream(chunk, state) {
   if (!chunk) {
     // Flush: send final chunk with finish_reason
     if (!state.finishReasonSent && state.started) {
@@ -631,15 +689,7 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
 
       state.toolCallIndex++;
 
-      let argsToEmit = item.arguments;
-      if (argsToEmit != null && typeof argsToEmit === "object" && !Array.isArray(argsToEmit)) {
-        // Fix #1674 & #1852: Strip empty string and array placeholders emitted by GPT-5.5 for optional fields
-        const cleaned = { ...argsToEmit };
-        for (const [k, v] of Object.entries(cleaned)) {
-          if (v === "" || (Array.isArray(v) && v.length === 0)) delete cleaned[k];
-        }
-        argsToEmit = cleaned;
-      }
+      const argsToEmit = stripEmptyOptionalToolArgs(item.arguments, toolName);
 
       const argsStr =
         argsToEmit != null
@@ -681,14 +731,7 @@ export function openaiResponsesToOpenAIResponse(chunk, state) {
 
     // Only emit if arguments exist in the done event AND they weren't already streamed via deltas
     if (item.arguments != null && !buffered) {
-      let argsToEmit = item.arguments;
-      if (argsToEmit != null && typeof argsToEmit === "object" && !Array.isArray(argsToEmit)) {
-        const cleaned = { ...argsToEmit };
-        for (const [k, v] of Object.entries(cleaned)) {
-          if (v === "" || (Array.isArray(v) && v.length === 0)) delete cleaned[k];
-        }
-        argsToEmit = cleaned;
-      }
+      const argsToEmit = stripEmptyOptionalToolArgs(item.arguments, toolName);
 
       const argsStr = typeof argsToEmit === "string" ? argsToEmit : JSON.stringify(argsToEmit);
       if (argsStr) {

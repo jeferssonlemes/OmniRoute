@@ -7,6 +7,7 @@ import {
   DEFAULT_CAVEMAN_OUTPUT_MODE_CONFIG,
   DEFAULT_COMPRESSION_LANGUAGE_CONFIG,
   DEFAULT_COMPRESSION_CONFIG,
+  DEFAULT_CONTEXT_EDITING_CONFIG,
   DEFAULT_MCP_ACCESSIBILITY_CONFIG,
   DEFAULT_RTK_CONFIG,
   DEFAULT_ULTRA_CONFIG,
@@ -17,6 +18,7 @@ import {
   type CompressionPipelineStep,
   type CompressionConfig,
   type CompressionMode,
+  type ContextEditingConfig,
   type McpAccessibilityConfig,
   type RtkConfig,
   type UltraConfig,
@@ -34,13 +36,11 @@ const COMPRESSION_MODES = new Set<CompressionMode>([
 ]);
 
 type JsonRecord = Record<string, unknown>;
-type DbInstance = ReturnType<typeof getDbInstance>;
-
 // TTL cache for compression settings (5s)
 let compressionSettingsCache: {
   value: CompressionConfig;
   expiresAt: number;
-  db: DbInstance;
+  dbRef: WeakRef<object>;
 } | null = null;
 
 function toRecord(value: unknown): JsonRecord {
@@ -200,6 +200,17 @@ function normalizeLanguageConfig(value: unknown): CompressionLanguageConfig {
   };
 }
 
+function normalizeContextEditingConfig(value: unknown): ContextEditingConfig {
+  const record = toRecord(value);
+  return {
+    ...DEFAULT_CONTEXT_EDITING_CONFIG,
+    enabled:
+      typeof record.enabled === "boolean"
+        ? record.enabled
+        : DEFAULT_CONTEXT_EDITING_CONFIG.enabled,
+  };
+}
+
 function normalizeStackedPipeline(value: unknown): CompressionPipelineStep[] {
   const source = Array.isArray(value) ? value : (DEFAULT_COMPRESSION_CONFIG.stackedPipeline ?? []);
   const pipeline: CompressionPipelineStep[] = [];
@@ -344,11 +355,12 @@ export async function getCompressionSettings(): Promise<CompressionConfig> {
   const db = getDbInstance();
   if (
     compressionSettingsCache &&
-    compressionSettingsCache.db === db &&
-    Date.now() < compressionSettingsCache.expiresAt
+    Date.now() < compressionSettingsCache.expiresAt &&
+    compressionSettingsCache.dbRef.deref() === db
   ) {
     return compressionSettingsCache.value;
   }
+  compressionSettingsCache = null;
 
   const rows = db.prepare("SELECT key, value FROM key_value WHERE namespace = ?").all(NAMESPACE);
 
@@ -361,6 +373,7 @@ export async function getCompressionSettings(): Promise<CompressionConfig> {
     stackedPipeline: normalizeStackedPipeline(undefined),
     aggressive: normalizeAggressiveConfig(undefined),
     ultra: normalizeUltraConfig(undefined),
+    contextEditing: { ...DEFAULT_CONTEXT_EDITING_CONFIG },
   };
 
   for (const row of rows) {
@@ -441,6 +454,9 @@ export async function getCompressionSettings(): Promise<CompressionConfig> {
       case "ultraConfig":
         config.ultra = normalizeUltraConfig(parsed);
         break;
+      case "contextEditing":
+        config.contextEditing = normalizeContextEditingConfig(parsed);
+        break;
     }
   }
 
@@ -448,7 +464,7 @@ export async function getCompressionSettings(): Promise<CompressionConfig> {
   compressionSettingsCache = {
     value: config,
     expiresAt: Date.now() + 5000,
-    db,
+    dbRef: new WeakRef(db),
   };
 
   return config;

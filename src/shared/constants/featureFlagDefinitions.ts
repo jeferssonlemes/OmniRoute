@@ -12,7 +12,7 @@ export interface FeatureFlagDefinition {
 }
 
 export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
-  // ──────────────── Security (6) ────────────────
+  // ──────────────── Security (9) ────────────────
   {
     key: "REQUIRE_API_KEY",
     label: "Require API Key",
@@ -21,7 +21,7 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     category: "security",
     defaultValue: "false",
     type: "boolean",
-    requiresRestart: true,
+    requiresRestart: false,
     warningLevel: "caution",
   },
   {
@@ -70,6 +70,19 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     warningLevel: "info",
   },
   {
+    key: "PII_RESPONSE_SANITIZATION_MODE",
+    label: "PII Response Sanitization Mode",
+    description:
+      "Mode for PII response sanitization: redact (replace PII), warn (log only), block (reject), off (disable)",
+    descriptionI18nKey: "featureFlagPiiResponseSanitizationModeDescription",
+    category: "security",
+    defaultValue: "redact",
+    type: "enum",
+    enumValues: ["redact", "warn", "block", "off"],
+    requiresRestart: false,
+    warningLevel: "info",
+  },
+  {
     key: "OUTBOUND_SSRF_GUARD_ENABLED",
     label: "SSRF Guard",
     description: "Block outbound requests to private/internal IP ranges",
@@ -80,8 +93,19 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     requiresRestart: false,
     warningLevel: "info",
   },
-
-  // ──────────────── Network (5) ────────────────
+  {
+    key: "ALLOW_API_KEY_REVEAL",
+    label: "API Key Reveal",
+    description:
+      "Allow authenticated dashboard users to reveal stored API keys instead of only seeing masked values.",
+    descriptionI18nKey: "featureFlagAllowApiKeyRevealDescription",
+    category: "security",
+    defaultValue: "false",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "danger",
+  },
+  // ──────────────── Network (7) ────────────────
   {
     key: "ENABLE_TLS_FINGERPRINT",
     label: "TLS Fingerprint",
@@ -103,6 +127,30 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     type: "boolean",
     requiresRestart: false,
     warningLevel: "info",
+  },
+  {
+    key: "PROXY_AUTO_SELECT_ENABLED",
+    label: "Proxy Auto-Selection Fallback",
+    description:
+      "When no proxy is assigned to a connection, auto-select the first working proxy from the registry. Off by default — otherwise any single registry proxy becomes a global fallback for all traffic (#3332).",
+    descriptionI18nKey: "settings.featureFlags.proxyAutoSelectEnabled",
+    category: "network",
+    defaultValue: "false",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "caution",
+  },
+  {
+    key: "OMNIROUTE_CONTROL_PLANE_PROXY_DIRECT_FALLBACK",
+    label: "Control-Plane Proxy Direct Fallback",
+    description:
+      "Allow OAuth and provider validation flows to bypass a pinned proxy and connect directly when proxy reachability pre-checks fail. Off by default because this can change account egress IP.",
+    descriptionI18nKey: "featureFlagOmnirouteControlPlaneProxyDirectFallbackDescription",
+    category: "network",
+    defaultValue: "false",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "danger",
   },
   {
     key: "MITM_DISABLE_TLS_VERIFY",
@@ -174,7 +222,7 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     warningLevel: "info",
   },
 
-  // ──────────────── Runtime (5) ────────────────
+  // ──────────────── Runtime (10) ────────────────
   {
     key: "OMNIROUTE_MCP_ENFORCE_SCOPES",
     label: "MCP Enforce Scopes",
@@ -234,12 +282,58 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
     key: "OMNIROUTE_ENABLE_LIVE_WS",
     label: "Live Dashboard WebSocket",
     description:
-      "Start the real-time dashboard WebSocket server on import (port 20129 by default).",
+      "Start the real-time dashboard WebSocket server on import (port 20129, loopback-bound by default). Default: enabled. Set to '0' or 'false' to disable. LAN exposure requires LIVE_WS_HOST=0.0.0.0 + LIVE_WS_ALLOWED_ORIGINS.",
     descriptionI18nKey: "featureFlagOmnirouteEnableLiveWsDescription",
     category: "runtime",
     defaultValue: "true",
     type: "boolean",
     requiresRestart: true,
+    warningLevel: "info",
+  },
+  {
+    key: "OMNIROUTE_CODEX_WS_ENABLED",
+    label: "Codex Responses WebSocket",
+    description:
+      "Allow Codex to use the Responses-over-WebSocket transport (the codex CLI WS endpoint and codexTransport=websocket). When off, Codex falls back to HTTP Responses.",
+    descriptionI18nKey: "featureFlagOmnirouteCodexWsEnabledDescription",
+    category: "runtime",
+    defaultValue: "true",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "info",
+  },
+  {
+    key: "OMNIROUTE_EMERGENCY_FALLBACK",
+    label: "Emergency Fallback",
+    description: "Route budget-exhausted requests to the emergency free fallback provider/model.",
+    descriptionI18nKey: "featureFlagOmnirouteEmergencyFallbackDescription",
+    category: "runtime",
+    defaultValue: "true",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "caution",
+  },
+  {
+    key: "MODEL_CATALOG_INCLUDE_NAMES",
+    label: "Model Catalog Names",
+    description:
+      "Include display-friendly name fields in /v1/models responses. Disable for clients that expect model IDs only.",
+    descriptionI18nKey: "settings.featureFlags.modelCatalogIncludeNames",
+    category: "runtime",
+    defaultValue: "true",
+    type: "boolean",
+    requiresRestart: false,
+    warningLevel: "info",
+  },
+  {
+    key: "ARENA_ELO_SYNC_ENABLED",
+    label: "Arena ELO Sync",
+    description: "Enable periodic Arena AI leaderboard ELO sync for model intelligence rankings.",
+    descriptionI18nKey: "featureFlagArenaEloSyncEnabledDescription",
+    category: "runtime",
+    defaultValue: "true",
+    type: "boolean",
+    requiresRestart: false,
     warningLevel: "info",
   },
 
@@ -269,7 +363,8 @@ export const FEATURE_FLAG_DEFINITIONS: FeatureFlagDefinition[] = [
   {
     key: "PRICING_SYNC_ENABLED",
     label: "Pricing Sync",
-    description: "Enable automatic pricing data synchronization",
+    description:
+      "Enable automatic pricing data synchronization (requires the PRICING_SYNC_ENABLED environment variable to be set to true)",
     descriptionI18nKey: "featureFlagPricingSyncEnabledDescription",
     category: "cli",
     defaultValue: "false",

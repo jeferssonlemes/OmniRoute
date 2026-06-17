@@ -1,6 +1,6 @@
 {
   "name": "omniroute-desktop",
-  "version": "3.8.5",
+  "version": "3.8.27",
   "description": "OmniRoute Desktop Application",
   "main": "main.js",
   "author": {
@@ -25,15 +25,17 @@
     "pack": "npm run prepare:bundle && electron-builder --dir"
   },
   "dependencies": {
-    "electron-updater": "^6.8.6"
+    "electron-updater": "^6.8.9"
   },
   "devDependencies": {
-    "electron": "^42.2.0",
-    "electron-builder": "^26.11.1"
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.3"
   },
   "overrides": {
     "@xmldom/xmldom": "^0.9.10",
-    "plist": "^4.0.0"
+    "plist": "^4.0.0",
+    "form-data": "^4.0.6",
+    "js-yaml": "^4.2.0"
   },
   "build": {
     "appId": "online.omniroute.desktop",
@@ -51,13 +53,16 @@
     "files": [
       "main.js",
       "preload.js",
+      "loginManager.js",
+      "processTree.js",
       "sqlite-inspection.js",
+      "lib/resolveServerEntry.js",
       "package.json",
       "node_modules/**/*"
     ],
     "extraResources": [
       {
-        "from": "../.next/electron-standalone",
+        "from": "../.build/electron-standalone",
         "to": "app",
         "filter": [
           "**/*",
@@ -65,7 +70,7 @@
         ]
       },
       {
-        "from": "../.next/electron-standalone/node_modules",
+        "from": "../.build/electron-standalone/node_modules",
         "to": "app/node_modules",
         "filter": [
           "**/*"

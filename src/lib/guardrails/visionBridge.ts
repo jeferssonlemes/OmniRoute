@@ -18,11 +18,14 @@ import {
   isVisionBridgeForcedModel,
 } from "@/shared/constants/visionBridgeDefaults";
 
-/// Check if a model with a combo mapping should trigger vision bridge processing.
-/// Resolves the combo targets and only returns true if at least one target model
-/// does NOT support vision natively. This avoids unnecessary vision model calls
-/// when all combo targets can handle images directly.
-async function shouldProcessImagesForComboModel(model: string): Promise<boolean> {
+type ComboVisionBridgeDecision = "process" | "skip" | "not-combo";
+
+/// Check if a combo model should trigger vision bridge processing.
+/// Resolves combo targets and returns:
+/// - "process" if any target cannot be proven vision-capable
+/// - "skip" if all model targets can handle images directly
+/// - "not-combo" when the model is not a combo/mapping
+async function getComboVisionBridgeDecision(model: string): Promise<ComboVisionBridgeDecision> {
   try {
     const { getComboByName } = await import("@/lib/localDb");
     const { resolveComboForModel } = await import("@/lib/db/modelComboMappings");
@@ -33,17 +36,17 @@ async function shouldProcessImagesForComboModel(model: string): Promise<boolean>
     // 2. If no exact match, try model-combo mapping
     if (!combo) {
       const mapping = await resolveComboForModel(model);
-      if (!mapping) return false;
+      if (!mapping) return "not-combo";
       const comboName = mapping.comboName ?? mapping.name ?? null;
-      if (!comboName) return false;
+      if (!comboName) return "not-combo";
       combo = await getComboByName(comboName);
     }
 
-    if (!combo) return false;
+    if (!combo) return "not-combo";
 
     // 3. Get the combo's models (target steps)
     const rawModels = (combo as Record<string, unknown>).models;
-    if (!Array.isArray(rawModels)) return false;
+    if (!Array.isArray(rawModels)) return "process";
 
     // 4. Check each target for vision support
     // combo-ref → conservative (process images)
@@ -52,27 +55,29 @@ async function shouldProcessImagesForComboModel(model: string): Promise<boolean>
     let hasModelStep = false;
     for (const step of rawModels) {
       const s = step as Record<string, unknown>;
-      if (s.kind === "combo-ref") return true;
+      if (s.kind === "combo-ref") return "process";
       if (s.kind === "model") {
         hasModelStep = true;
         const targetModel = s.model;
         if (typeof targetModel === "string") {
           const caps = getResolvedModelCapabilities(targetModel);
           if (caps.supportsVision !== true) {
-            return true;
+            return "process";
           }
+        } else {
+          return "process";
         }
       }
     }
 
     // All model steps support vision — safe to skip
-    if (hasModelStep) return false;
+    if (hasModelStep) return "skip";
 
     // No recognizable steps — don't force bridge
-    return false;
+    return "not-combo";
   } catch {
     // On error, try to process images (conservative)
-    return true;
+    return "process";
   }
 }
 
@@ -120,15 +125,24 @@ export class VisionBridgeGuardrail extends BaseGuardrail {
 
     // 4. Check if model supports vision
     const capabilities = getResolvedModelCapabilities(model);
+    const comboVisionBridgeDecision = forceVisionBridge
+      ? "process"
+      : this.deps.checkModelHasComboMapping
+        ? (await this.deps.checkModelHasComboMapping(model))
+          ? "process"
+          : "skip"
+        : await getComboVisionBridgeDecision(model);
+
+    if (comboVisionBridgeDecision === "skip") {
+      return { block: false };
+    }
+
     if (capabilities.supportsVision === true && !forceVisionBridge) {
       // The request model supports vision natively, but check if a
       // model-combo mapping routes this model through a combo where
       // some targets may NOT support vision. In that case, the vision
       // bridge must process images so combo targets can describe them.
-      const hasMapping = this.deps.checkModelHasComboMapping
-        ? await this.deps.checkModelHasComboMapping(model)
-        : await shouldProcessImagesForComboModel(model);
-      if (!hasMapping) {
+      if (comboVisionBridgeDecision !== "process") {
         return { block: false };
       }
       // Combo mapping found — fall through to process images
@@ -187,18 +201,21 @@ export class VisionBridgeGuardrail extends BaseGuardrail {
       })
     );
 
-    // Collect descriptions maintaining original order
-    const descriptions = results.map((result, i) => {
+    // Collect descriptions maintaining original order. A failed describe yields
+    // `null` so the original image is preserved downstream (#4012) — replacing it
+    // with an "(unavailable)" stub silently destroyed images for vision-capable
+    // upstreams whose capability OmniRoute couldn't prove from the registry.
+    const descriptions: (string | null)[] = results.map((result, i) => {
       if (result.status === "fulfilled") {
         return result.value;
       }
       const message =
         result.reason instanceof Error ? result.reason.message : String(result.reason);
       logger?.warn?.("VISION-BRIDGE", `Failed to get description for image ${i + 1}: ${message}`);
-      return `[Image ${i + 1}]: (unavailable)`;
+      return null;
     });
 
-    // 12. Replace image parts with text descriptions
+    // 12. Replace image parts with text descriptions (null → keep original image)
     const modifiedBody = replaceImageParts(
       body as Parameters<typeof replaceImageParts>[0],
       descriptions
@@ -210,7 +227,8 @@ export class VisionBridgeGuardrail extends BaseGuardrail {
       modifiedPayload: modifiedBody,
       meta: {
         imagesProcessed: descriptions.length,
-        descriptions,
+        // Keep meta observability stable: report a human label for failures.
+        descriptions: descriptions.map((d, i) => d ?? `[Image ${i + 1}]: (unavailable)`),
         processingTimeMs: processingTime,
         visionModel: config.model,
       },
