@@ -153,6 +153,15 @@ API Key:  [copy from Endpoint page]
 Model:    if/kimi-k2-thinking (or any provider/model prefix)
 ```
 
+If your editor cannot send `Authorization: Bearer ...`, use the tokenized compatibility base instead:
+
+```txt
+Base URL: http://localhost:20128/api/v1/vscode/YOUR_KEY/
+Models URL: http://localhost:20128/api/v1/vscode/YOUR_KEY/models
+Chat URL: http://localhost:20128/api/v1/vscode/YOUR_KEY/chat/completions
+Ollama Tags URL: http://localhost:20128/api/v1/vscode/YOUR_KEY/api/tags
+```
+
 Works with Claude Code, Codex CLI, Gemini CLI, Cursor, Cline, OpenClaw, OpenCode, and OpenAI-compatible SDKs.
 
 For detailed per-tool configuration (Claude Code, Codex CLI, Cursor, Cline, OpenClaw, Kilo Code, Copilot, and more), see the dedicated **[CLI Tools Guide](../reference/CLI-TOOLS.md)**.
@@ -207,7 +216,7 @@ Add to your MCP settings:
 }
 ```
 
-**Full MCP documentation:** [MCP Server README](../../open-sse/mcp-server/README.md) — 37 tools, IDE configs, Python/TS/Go clients.
+**Full MCP documentation:** [MCP Server README](../../open-sse/mcp-server/README.md) — 87 tools, IDE configs, Python/TS/Go clients.
 
 ### A2A Setup (Agent-to-Agent Protocol)
 
@@ -246,7 +255,7 @@ Backward compatibility is preserved: existing `FETCH_TIMEOUT_MS`, `API_BRIDGE_PR
 
 For Claude Code-compatible upstreams (`anthropic-compatible-cc-*`), OmniRoute derives the outbound `X-Stainless-Timeout` header from the resolved fetch timeout so provider-side read timeouts stay aligned with your env configuration.
 
-For third-party Claude Code-compatible reverse proxies, OmniRoute keeps the default `anthropic-beta` set conservative and, when `Client Cache Control` is left on `Auto`, only forwards client-provided `cache_control` markers.
+For third-party Claude Code-compatible reverse proxies, OmniRoute keeps the default `anthropic-beta` set conservative and, when `Client Cache Control` is left on `Auto`, only forwards client-provided `cache_control` markers. Enable the per-connection "Enable redact-thinking beta" toggle only when the upstream specifically requires redacted Claude thinking streams.
 
 ### Advanced Timeout Overrides
 

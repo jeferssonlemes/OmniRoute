@@ -30,6 +30,21 @@ export interface CompressionAnalyticsRow {
   rtk_raw_output_total_bytes?: number | null;
 }
 
+/**
+ * One row per engine that ran inside a stacked compression pipeline. A stacked
+ * request writes a single aggregate `compression_analytics` row (engine = mode) plus
+ * N of these — so per-engine savings are queryable historically, not just live.
+ */
+export interface CompressionEngineBreakdownRow {
+  timestamp: string;
+  request_id?: string | null;
+  engine: string;
+  original_tokens: number;
+  compressed_tokens: number;
+  tokens_saved: number;
+  duration_ms?: number | null;
+}
+
 export interface CompressionAnalyticsSummary {
   totalRequests: number;
   totalTokensSaved: number;
@@ -59,75 +74,38 @@ export interface CompressionAnalyticsSummary {
 
 let columnsEnsuredForDb: unknown = null;
 
+const COMPRESSION_ANALYTICS_COLUMNS = [
+  ["actual_prompt_tokens", "INTEGER"],
+  ["actual_completion_tokens", "INTEGER"],
+  ["actual_total_tokens", "INTEGER"],
+  ["actual_cache_read_tokens", "INTEGER"],
+  ["actual_cache_write_tokens", "INTEGER"],
+  ["estimated_usd_saved", "REAL"],
+  ["mcp_description_tokens_saved", "INTEGER DEFAULT 0"],
+  ["multimodal_skip_count", "INTEGER DEFAULT 0"],
+  ["receipt_source", "TEXT"],
+  ["validation_fallback", "INTEGER DEFAULT 0"],
+  ["output_mode", "TEXT"],
+  ["compression_combo_id", "TEXT"],
+  ["engine", "TEXT"],
+  ["rtk_raw_output_pointer", "TEXT"],
+  ["rtk_raw_output_bytes", "INTEGER"],
+  ["rtk_raw_output_pointers", "TEXT"],
+  ["rtk_raw_output_total_bytes", "INTEGER"],
+] as const;
+
 function ensureCompressionAnalyticsColumns(): void {
   const db = getDbInstance();
   if (columnsEnsuredForDb === db) return;
   const rows = db.prepare("PRAGMA table_info(compression_analytics)").all() as Array<{
     name: string;
   }>;
-  const columns = new Set(rows.map((row) => row.name));
-  const addColumn = (name: string, sql: string) => {
-    if (!columns.has(name)) db.exec(sql);
-  };
-  addColumn(
-    "actual_prompt_tokens",
-    "ALTER TABLE compression_analytics ADD COLUMN actual_prompt_tokens INTEGER"
-  );
-  addColumn(
-    "actual_completion_tokens",
-    "ALTER TABLE compression_analytics ADD COLUMN actual_completion_tokens INTEGER"
-  );
-  addColumn(
-    "actual_total_tokens",
-    "ALTER TABLE compression_analytics ADD COLUMN actual_total_tokens INTEGER"
-  );
-  addColumn(
-    "actual_cache_read_tokens",
-    "ALTER TABLE compression_analytics ADD COLUMN actual_cache_read_tokens INTEGER"
-  );
-  addColumn(
-    "actual_cache_write_tokens",
-    "ALTER TABLE compression_analytics ADD COLUMN actual_cache_write_tokens INTEGER"
-  );
-  addColumn(
-    "estimated_usd_saved",
-    "ALTER TABLE compression_analytics ADD COLUMN estimated_usd_saved REAL"
-  );
-  addColumn(
-    "mcp_description_tokens_saved",
-    "ALTER TABLE compression_analytics ADD COLUMN mcp_description_tokens_saved INTEGER DEFAULT 0"
-  );
-  addColumn(
-    "multimodal_skip_count",
-    "ALTER TABLE compression_analytics ADD COLUMN multimodal_skip_count INTEGER DEFAULT 0"
-  );
-  addColumn("receipt_source", "ALTER TABLE compression_analytics ADD COLUMN receipt_source TEXT");
-  addColumn(
-    "validation_fallback",
-    "ALTER TABLE compression_analytics ADD COLUMN validation_fallback INTEGER DEFAULT 0"
-  );
-  addColumn("output_mode", "ALTER TABLE compression_analytics ADD COLUMN output_mode TEXT");
-  addColumn(
-    "compression_combo_id",
-    "ALTER TABLE compression_analytics ADD COLUMN compression_combo_id TEXT"
-  );
-  addColumn("engine", "ALTER TABLE compression_analytics ADD COLUMN engine TEXT");
-  addColumn(
-    "rtk_raw_output_pointer",
-    "ALTER TABLE compression_analytics ADD COLUMN rtk_raw_output_pointer TEXT"
-  );
-  addColumn(
-    "rtk_raw_output_bytes",
-    "ALTER TABLE compression_analytics ADD COLUMN rtk_raw_output_bytes INTEGER"
-  );
-  addColumn(
-    "rtk_raw_output_pointers",
-    "ALTER TABLE compression_analytics ADD COLUMN rtk_raw_output_pointers TEXT"
-  );
-  addColumn(
-    "rtk_raw_output_total_bytes",
-    "ALTER TABLE compression_analytics ADD COLUMN rtk_raw_output_total_bytes INTEGER"
-  );
+  const existing = new Set(rows.map((row) => row.name));
+  for (const [name, type] of COMPRESSION_ANALYTICS_COLUMNS) {
+    if (!existing.has(name)) {
+      db.exec(`ALTER TABLE compression_analytics ADD COLUMN ${name} ${type}`);
+    }
+  }
   columnsEnsuredForDb = db;
 }
 
@@ -174,6 +152,53 @@ export function insertCompressionAnalyticsRow(row: CompressionAnalyticsRow): voi
     row.rtk_raw_output_pointers ?? null,
     row.rtk_raw_output_total_bytes ?? null
   );
+}
+
+let breakdownTableEnsuredForDb: unknown = null;
+
+function ensureCompressionEngineBreakdownTable(): void {
+  const db = getDbInstance();
+  if (breakdownTableEnsuredForDb === db) return;
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS compression_engine_breakdown (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp TEXT NOT NULL,
+      request_id TEXT,
+      engine TEXT NOT NULL,
+      original_tokens INTEGER NOT NULL DEFAULT 0,
+      compressed_tokens INTEGER NOT NULL DEFAULT 0,
+      tokens_saved INTEGER NOT NULL DEFAULT 0,
+      duration_ms INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_ceb_engine_ts ON compression_engine_breakdown(engine, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_ceb_request ON compression_engine_breakdown(request_id);
+  `);
+  breakdownTableEnsuredForDb = db;
+}
+
+export function insertCompressionEngineBreakdown(rows: CompressionEngineBreakdownRow[]): void {
+  if (!rows.length) return;
+  const db = getDbInstance();
+  ensureCompressionEngineBreakdownTable();
+  const stmt = db.prepare(
+    `INSERT INTO compression_engine_breakdown
+       (timestamp, request_id, engine, original_tokens, compressed_tokens, tokens_saved, duration_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertAll = db.transaction((items: CompressionEngineBreakdownRow[]) => {
+    for (const r of items) {
+      stmt.run(
+        r.timestamp,
+        r.request_id ?? null,
+        r.engine,
+        r.original_tokens,
+        r.compressed_tokens,
+        r.tokens_saved,
+        r.duration_ms ?? null
+      );
+    }
+  });
+  insertAll(rows);
 }
 
 export function attachCompressionUsageReceipt(
@@ -240,6 +265,55 @@ function toFiniteInt(value: unknown): number | null {
 
 function appendCondition(whereClause: string, condition: string): string {
   return whereClause ? `${whereClause} AND ${condition}` : `WHERE ${condition}`;
+}
+
+type EngineAggRow = { runs: number; original: number; compressed: number; saved: number };
+
+export function getPerEngineAnalytics(engineId: string, days = 7) {
+  const db = getDbInstance();
+  ensureCompressionAnalyticsColumns();
+  ensureCompressionEngineBreakdownTable();
+  const since = new Date(Date.now() - days * 86400_000).toISOString();
+
+  // (1) Per-engine contributions from stacked runs (one breakdown row per engine).
+  const breakdown = db
+    .prepare(
+      `SELECT COUNT(*) AS runs,
+              COALESCE(SUM(original_tokens), 0) AS original,
+              COALESCE(SUM(compressed_tokens), 0) AS compressed,
+              COALESCE(SUM(tokens_saved), 0) AS saved
+       FROM compression_engine_breakdown
+       WHERE engine = ? AND timestamp >= ?`
+    )
+    .get(engineId, since) as EngineAggRow;
+
+  // (2) Legacy single-engine rows from compression_analytics, EXCLUDING any request
+  // that already has a per-engine breakdown — so a stacked run's aggregate row is not
+  // double-counted on top of its breakdown rows.
+  const legacy = db
+    .prepare(
+      `SELECT COUNT(*) AS runs,
+              COALESCE(SUM(original_tokens), 0) AS original,
+              COALESCE(SUM(compressed_tokens), 0) AS compressed,
+              COALESCE(SUM(tokens_saved), 0) AS saved
+       FROM compression_analytics
+       WHERE COALESCE(engine, mode) = ? AND timestamp >= ?
+         AND (
+           request_id IS NULL
+           OR request_id NOT IN (
+             SELECT request_id FROM compression_engine_breakdown WHERE request_id IS NOT NULL
+           )
+         )`
+    )
+    .get(engineId, since) as EngineAggRow;
+
+  const runs = breakdown.runs + legacy.runs;
+  const original = breakdown.original + legacy.original;
+  const compressed = breakdown.compressed + legacy.compressed;
+  const tokensSaved = Math.max(0, breakdown.saved + legacy.saved);
+  const avgSavingsPercent =
+    original > 0 ? Math.round(((original - compressed) / original) * 1000) / 10 : 0;
+  return { engineId, runs, tokensSaved, avgSavingsPercent, days };
 }
 
 export function getCompressionAnalyticsSummary(since?: string): CompressionAnalyticsSummary {
@@ -456,4 +530,33 @@ export function getCompressionAnalyticsSummary(since?: string): CompressionAnaly
       estimatedTokensSaved: mcpDescriptionRow?.saved ?? 0,
     },
   };
+}
+
+export interface LatestCompressionAnalyticsRun {
+  id: number;
+  timestamp: string;
+  combo_id: string | null;
+  compression_combo_id: string | null;
+  mode: string;
+  original_tokens: number;
+  compressed_tokens: number;
+  tokens_saved: number;
+  duration_ms: number | null;
+  request_id: string | null;
+  engine: string | null;
+  validation_fallback: number | null;
+}
+
+export function getLatestCompressionAnalyticsRun(): LatestCompressionAnalyticsRun | undefined {
+  const db = getDbInstance();
+  return db
+    .prepare(
+      `SELECT id, timestamp, combo_id, compression_combo_id, mode,
+              original_tokens, compressed_tokens, tokens_saved, duration_ms,
+              request_id, engine, validation_fallback
+         FROM compression_analytics
+        ORDER BY timestamp DESC, id DESC
+        LIMIT 1`
+    )
+    .get() as LatestCompressionAnalyticsRun | undefined;
 }

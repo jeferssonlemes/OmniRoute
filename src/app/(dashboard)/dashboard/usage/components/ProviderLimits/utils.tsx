@@ -246,12 +246,15 @@ export function parseQuotaData(provider, data) {
       case "glm":
       case "glm-cn":
       case "glmt":
+      case "opencode-go":
         if (data.quotas) {
           Object.entries(data.quotas).forEach(([name, quota]: [string, any]) => {
             normalizedQuotas.push(
               normalizeQuotaEntry(name, quota, {
                 displayName: quota?.displayName,
                 details: Array.isArray(quota?.details) ? quota.details : undefined,
+                isPercentageOnly:
+                  Number(quota?.total || 0) === 100 && quota?.remainingPercentage !== undefined,
               })
             );
           });
@@ -259,6 +262,7 @@ export function parseQuotaData(provider, data) {
         break;
 
       case "antigravity":
+      case "agy":
         if (data.quotas) {
           Object.entries(data.quotas).forEach(([modelKey, quota]: [string, any]) => {
             if (modelKey === "credits") {
@@ -288,6 +292,11 @@ export function parseQuotaData(provider, data) {
             normalizedQuotas.push(
               normalizeQuotaEntry(modelKey, quota, {
                 modelKey: modelKey,
+                isPercentageOnly: quota?.fractionReported === true,
+                ...(quota?.quotaSource ? { quotaSource: quota.quotaSource } : {}),
+                ...(quota?.fractionReported !== undefined
+                  ? { fractionReported: quota.fractionReported }
+                  : {}),
               })
             );
           });
@@ -297,7 +306,11 @@ export function parseQuotaData(provider, data) {
       case "codex":
         if (data.quotas) {
           Object.entries(data.quotas).forEach(([quotaType, quota]: [string, any]) => {
-            normalizedQuotas.push(normalizeQuotaEntry(quotaType, quota));
+            normalizedQuotas.push(
+              normalizeQuotaEntry(quotaType, quota, {
+                isPercentageOnly: true,
+              })
+            );
           });
         }
         break;
@@ -323,7 +336,11 @@ export function parseQuotaData(provider, data) {
           });
         } else if (data.quotas) {
           Object.entries(data.quotas).forEach(([name, quota]: [string, any]) => {
-            normalizedQuotas.push(normalizeQuotaEntry(name, quota));
+            normalizedQuotas.push(
+              normalizeQuotaEntry(name, quota, {
+                isPercentageOnly: true,
+              })
+            );
           });
         }
         break;
@@ -403,7 +420,12 @@ export function parseQuotaData(provider, data) {
     });
   }
 
-  if (providerId === "glm" || providerId === "glm-cn" || providerId === "glmt") {
+  if (
+    providerId === "glm" ||
+    providerId === "glm-cn" ||
+    providerId === "glmt" ||
+    providerId === "opencode-go"
+  ) {
     normalizedQuotas.sort((a, b) => {
       const orderA = GLM_QUOTA_ORDER[a.name] ?? 99;
       const orderB = GLM_QUOTA_ORDER[b.name] ?? 99;
@@ -564,9 +586,7 @@ const QUOTA_BAR_GREEN_THRESHOLD = 50;
 const QUOTA_BAR_YELLOW_THRESHOLD = 20;
 
 function quotaRemainingPercent(q: any): number {
-  if (q?.unlimited) return 100;
-  if (q?.remainingPercentage !== undefined) return Number(q.remainingPercentage);
-  return calculatePercentage(q?.used, q?.total);
+  return getQuotaRemainingPercentage(q);
 }
 
 function quotaStatus(q: any): "critical" | "alert" | "ok" {
@@ -602,6 +622,21 @@ export function topQuotas(quotas: any[], n = 3): any[] {
       return quotaRemainingPercent(a) - quotaRemainingPercent(b);
     })
     .slice(0, n);
+}
+
+export function getQuotaRemainingPercentage(q: any): number {
+  if (q?.unlimited) return 100;
+  if (q?.remainingPercentage !== undefined) return Number(q.remainingPercentage);
+  return calculatePercentage(q?.used, q?.total);
+}
+
+export function isPercentageOnlyQuota(q: any): boolean {
+  return q?.isPercentageOnly === true || q?.fractionReported === true;
+}
+
+export function shouldShowQuotaUsageCount(q: any): boolean {
+  const total = Number(q?.total || 0);
+  return total > 0 && q?.unlimited !== true && !isPercentageOnlyQuota(q);
 }
 
 export function getBarColor(remainingPercentage: number): {

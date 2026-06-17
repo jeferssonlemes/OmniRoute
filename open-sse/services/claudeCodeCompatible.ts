@@ -2,9 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { getStainlessTimeoutSeconds } from "@/shared/utils/runtimeTimeouts";
 import { ANTHROPIC_VERSION_HEADER } from "../config/anthropicHeaders.ts";
-import { supportsXHighEffort } from "../config/providerModels.ts";
+import { supportsClaudeMaxEffort, supportsXHighEffort } from "../config/providerModels.ts";
 import { prepareClaudeRequest } from "../translator/helpers/claudeHelper.ts";
 import { signRequestBody } from "./claudeCodeCCH.ts";
+import { resolveClaudeCodeCompatibleAnthropicBeta } from "./claudeCodeCompatibleBeta.ts";
 import { remapToolNamesInRequest } from "./claudeCodeToolRemapper.ts";
 import {
   enforceThinkingTemperature,
@@ -34,13 +35,13 @@ export const CLAUDE_CODE_COMPATIBLE_DEFAULT_CHAT_PATH = "/v1/messages?beta=true"
 export const CLAUDE_CODE_COMPATIBLE_DEFAULT_MODELS_PATH = "/models";
 export const CLAUDE_CODE_COMPATIBLE_DEFAULT_MAX_TOKENS = 64000;
 export const CLAUDE_CODE_COMPATIBLE_ANTHROPIC_VERSION = ANTHROPIC_VERSION_HEADER;
-export const CLAUDE_CODE_COMPATIBLE_ANTHROPIC_BETA = [
-  "claude-code-20250219",
-  "interleaved-thinking-2025-05-14",
-  "effort-2025-11-24",
-].join(",");
-export const CLAUDE_CODE_COMPATIBLE_VERSION = "2.1.146";
-export const CLAUDE_CODE_COMPATIBLE_USER_AGENT = "claude-cli/2.1.146 (external, sdk-cli)";
+export {
+  CLAUDE_CODE_COMPATIBLE_ANTHROPIC_BETA,
+  CLAUDE_CODE_COMPATIBLE_REDACT_THINKING_BETA,
+  resolveClaudeCodeCompatibleAnthropicBeta,
+} from "./claudeCodeCompatibleBeta.ts";
+export const CLAUDE_CODE_COMPATIBLE_VERSION = "2.1.158";
+export const CLAUDE_CODE_COMPATIBLE_USER_AGENT = "claude-cli/2.1.158 (external, sdk-cli)";
 export const CLAUDE_CODE_COMPATIBLE_STAINLESS_PACKAGE_VERSION = "0.94.0";
 export const CLAUDE_CODE_COMPATIBLE_STAINLESS_RUNTIME_VERSION = "v24.3.0";
 export const CONTEXT_1M_BETA_HEADER = "context-1m-2025-08-07";
@@ -51,7 +52,12 @@ const CLAUDE_CODE_COMPATIBLE_DEFAULT_SYSTEM_BLOCKS = [
     text: "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
   },
 ];
-const CONTEXT_1M_SUPPORTED_MODELS = ["claude-opus-4-7", "claude-opus-4-6"];
+const CONTEXT_1M_SUPPORTED_MODELS = [
+  "claude-fable-5",
+  "claude-opus-4-8",
+  "claude-opus-4-7",
+  "claude-opus-4-6",
+];
 export const CLAUDE_CODE_COMPATIBLE_STAINLESS_TIMEOUT_SECONDS = getStainlessTimeoutSeconds(
   process.env
 );
@@ -79,6 +85,7 @@ type BuildRequestOptions = {
   sessionId?: string | null;
   preserveCacheControl?: boolean;
   preserveClaudeMessages?: boolean;
+  redactThinking?: boolean;
 };
 
 function supportsClaudeXHighEffort(model: string | null | undefined): boolean {
@@ -164,7 +171,8 @@ export function modelSupportsContext1mBeta(model: string | null | undefined): bo
 export function buildClaudeCodeCompatibleHeaders(
   apiKey: string,
   stream = false,
-  sessionId?: string | null
+  sessionId?: string | null,
+  options: { redactThinking?: boolean } = {}
 ): Record<string, string> {
   void stream;
   // These headers intentionally mirror Claude Code's wire image closely.
@@ -175,7 +183,9 @@ export function buildClaudeCodeCompatibleHeaders(
     Accept: "application/json",
     Authorization: `Bearer ${apiKey}`,
     "anthropic-version": CLAUDE_CODE_COMPATIBLE_ANTHROPIC_VERSION,
-    "anthropic-beta": CLAUDE_CODE_COMPATIBLE_ANTHROPIC_BETA,
+    "anthropic-beta": resolveClaudeCodeCompatibleAnthropicBeta({
+      redactThinking: options.redactThinking === true,
+    }),
     "anthropic-dangerous-direct-browser-access": "true",
     "x-app": "cli",
     "User-Agent": CLAUDE_CODE_COMPATIBLE_USER_AGENT,
@@ -229,6 +239,7 @@ export function buildClaudeCodeCompatibleRequest({
   sessionId,
   preserveCacheControl = false,
   preserveClaudeMessages = false,
+  redactThinking = false,
 }: BuildRequestOptions) {
   const normalized = normalizedBody || {};
   const preparedClaudeBody = claudeBody
@@ -309,21 +320,6 @@ export function buildClaudeCodeCompatibleRequest({
   };
 }
 
-/**
- * Full Claude Code request processing pipeline.
- *
- * Applies all mechanisms that real Claude Code uses:
- * 1. Build base request (system prompt, billing header, messages, tools)
- * 2. Remap tool names to TitleCase
- * 3. Enforce thinking temperature constraint (temp=1)
- * 4. Disable thinking when tool_choice forces a specific tool
- * 5. Enforce 4-block cache_control limit when markers are already present
- * 6. Obfuscate sensitive words in user messages
- * 7. Serialize with CCH placeholder
- * 8. Sign body with xxHash64 CCH attestation
- *
- * Returns { bodyString, headers } ready to send upstream.
- */
 export async function buildAndSignClaudeCodeRequest(
   options: BuildRequestOptions & { apiKey: string; enableObfuscation?: boolean }
 ): Promise<{ bodyString: string; headers: Record<string, string> }> {
@@ -395,7 +391,9 @@ export async function buildAndSignClaudeCodeRequest(
 
   // Build headers
   const sessionId = options.sessionId || resolveClaudeCodeCompatibleSessionId();
-  const headers = buildClaudeCodeCompatibleHeaders(apiKey, options.stream ?? false, sessionId);
+  const headers = buildClaudeCodeCompatibleHeaders(apiKey, options.stream ?? false, sessionId, {
+    redactThinking: buildOptions.redactThinking === true,
+  });
 
   return { bodyString, headers };
 }
@@ -451,7 +449,7 @@ export function resolveClaudeCodeCompatibleEffort(
   sourceBody?: Record<string, unknown> | null,
   normalizedBody?: Record<string, unknown> | null,
   model?: string | null
-): "low" | "medium" | "high" | "xhigh" {
+): "low" | "medium" | "high" | "xhigh" | "max" {
   const raw =
     readNestedString(sourceBody, ["output_config", "effort"]) ||
     readNestedString(sourceBody, ["reasoning", "effort"]) ||
@@ -474,7 +472,7 @@ export function resolveClaudeCodeCompatibleEffort(
     return supportsClaudeXHighEffort(model) ? "xhigh" : "high";
   }
   if (normalizedEffort === "max") {
-    return supportsClaudeXHighEffort(model) ? "xhigh" : "high";
+    return supportsClaudeMaxEffort(model) ? "max" : "high";
   }
   return supportsClaudeXHighEffort(model) ? "xhigh" : "high";
 }
@@ -1102,7 +1100,7 @@ function resolveClaudeCodeCompatibleOutputConfig({
   sourceBody?: Record<string, unknown> | null;
   normalizedBody?: Record<string, unknown> | null;
   model?: string | null;
-  effort: "low" | "medium" | "high" | "xhigh";
+  effort: "low" | "medium" | "high" | "xhigh" | "max";
 }) {
   const outputConfig =
     readRecord(cloneValue(claudeBody?.output_config)) ||

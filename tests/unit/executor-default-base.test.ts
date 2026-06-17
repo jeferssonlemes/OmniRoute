@@ -14,8 +14,10 @@ import { PROVIDERS } from "../../open-sse/config/constants.ts";
 import {
   CLAUDE_CODE_COMPATIBLE_ANTHROPIC_VERSION,
   CLAUDE_CODE_COMPATIBLE_DEFAULT_CHAT_PATH,
+  CLAUDE_CODE_COMPATIBLE_REDACT_THINKING_BETA,
   CONTEXT_1M_BETA_HEADER,
 } from "../../open-sse/services/claudeCodeCompatible.ts";
+import { runWithCapture } from "../../open-sse/utils/providerRequestLogging.ts";
 
 class TestExecutor extends BaseExecutor {
   constructor(config = {}) {
@@ -97,15 +99,46 @@ test("DefaultExecutor.buildUrl handles Gemini, Claude and Qwen variants", () => 
 
 test("DefaultExecutor.buildUrl uses full chat endpoints for hosted OpenAI-compatible providers", () => {
   const bazaarlink = new DefaultExecutor("bazaarlink");
-  const completions = new DefaultExecutor("completions");
+  const crof = new DefaultExecutor("crof");
 
   assert.equal(
     bazaarlink.buildUrl("auto:free", true),
     "https://bazaarlink.ai/api/v1/chat/completions"
   );
+  assert.equal(crof.buildUrl("gpt-4.1", true), "https://crof.ai/v1/chat/completions");
+});
+
+test("DefaultExecutor.buildUrl honors a custom providerSpecificData.baseUrl for the built-in openai provider", () => {
+  const openai = new DefaultExecutor("openai");
+
+  // No override → hardcoded OpenAI endpoint (unchanged behavior).
   assert.equal(
-    completions.buildUrl("gpt-4.1", true),
-    "https://completions.me/api/v1/chat/completions"
+    openai.buildUrl("gpt-4o", true),
+    "https://api.openai.com/v1/chat/completions"
+  );
+
+  // Custom base URL (e.g. a proxy/gateway) must be used instead of api.openai.com.
+  assert.equal(
+    openai.buildUrl("gpt-4o", true, 0, {
+      providerSpecificData: { baseUrl: "https://api.contactboxtools.me/v1" },
+    }),
+    "https://api.contactboxtools.me/v1/chat/completions"
+  );
+
+  // Trailing slash is normalized.
+  assert.equal(
+    openai.buildUrl("gpt-4o", true, 0, {
+      providerSpecificData: { baseUrl: "https://proxy.example/v1/" },
+    }),
+    "https://proxy.example/v1/chat/completions"
+  );
+
+  // A base URL already pointing at the chat endpoint is kept as-is.
+  assert.equal(
+    openai.buildUrl("gpt-4o", true, 0, {
+      providerSpecificData: { baseUrl: "https://proxy.example/v1/chat/completions" },
+    }),
+    "https://proxy.example/v1/chat/completions"
   );
 });
 
@@ -184,6 +217,7 @@ test("DefaultExecutor.buildUrl normalizes configurable chat-openai-compat base U
   const maritalk = new DefaultExecutor("maritalk");
   const snowflake = new DefaultExecutor("snowflake");
   const gigachat = new DefaultExecutor("gigachat");
+  const siliconflow = new DefaultExecutor("siliconflow");
 
   assert.equal(
     bailian.buildUrl("qwen3-coder-plus", true, 0, {
@@ -272,6 +306,16 @@ test("DefaultExecutor.buildUrl normalizes configurable chat-openai-compat base U
       providerSpecificData: { baseUrl: "https://gigachat.devices.sberbank.ru/api/v1" },
     }),
     "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
+  );
+  assert.equal(
+    siliconflow.buildUrl("deepseek-ai/DeepSeek-V3.2", true),
+    "https://api.siliconflow.com/v1/chat/completions"
+  );
+  assert.equal(
+    siliconflow.buildUrl("deepseek-ai/DeepSeek-V3.2", true, 0, {
+      providerSpecificData: { baseUrl: "https://api.siliconflow.cn/v1" },
+    }),
+    "https://api.siliconflow.cn/v1/chat/completions"
   );
 });
 
@@ -403,6 +447,26 @@ test("DefaultExecutor local OpenAI-style providers honor custom base URLs and sk
   assert.equal(lmStudioUrl, "http://127.0.0.1:4321/v1/chat/completions");
   assert.equal(vllmHeaders.Authorization, undefined);
   assert.equal(vllmHeaders.Accept, "application/json");
+});
+
+test("DefaultExecutor local providers append /v1/chat/completions for bare hostname base URLs", () => {
+  const llamaCpp = new DefaultExecutor("llama-cpp");
+  const lmStudio = new DefaultExecutor("lm-studio");
+  const vllm = new DefaultExecutor("vllm");
+
+  const bareHost = llamaCpp.buildUrl("gemma-4", true, 0, {
+    providerSpecificData: { baseUrl: "https://foo.llama.example.com" },
+  });
+  const customPath = lmStudio.buildUrl("gemma-4", true, 0, {
+    providerSpecificData: { baseUrl: "https://bar.llama.ai/foo" },
+  });
+  const alreadyComplete = vllm.buildUrl("gemma-4", true, 0, {
+    providerSpecificData: { baseUrl: "https://baz.llama.ai/v1/chat/completions" },
+  });
+
+  assert.equal(bareHost, "https://foo.llama.example.com/v1/chat/completions");
+  assert.equal(customPath, "https://bar.llama.ai/foo/v1/chat/completions");
+  assert.equal(alreadyComplete, "https://baz.llama.ai/v1/chat/completions");
 });
 
 test("DefaultExecutor.buildHeaders handles Snowflake PATs and GigaChat access tokens", () => {
@@ -539,7 +603,7 @@ test("DefaultExecutor.execute uses CC-compatible connection defaults to append 1
         apiKey: "cc-key",
         providerSpecificData: {
           ccSessionId: "session-1",
-          requestDefaults: { context1m: true },
+          requestDefaults: { context1m: true, redactThinking: true },
         },
       },
       extendedContext: false,
@@ -567,8 +631,83 @@ test("DefaultExecutor.execute uses CC-compatible connection defaults to append 1
   }
 
   assert.equal(calls[0].headers["anthropic-beta"].includes(CONTEXT_1M_BETA_HEADER), false);
+  assert.equal(
+    calls[0].headers["anthropic-beta"].includes(CLAUDE_CODE_COMPATIBLE_REDACT_THINKING_BETA),
+    false
+  );
   assert.equal(calls[1].headers["anthropic-beta"].includes(CONTEXT_1M_BETA_HEADER), true);
+  assert.equal(
+    calls[1].headers["anthropic-beta"].includes(CLAUDE_CODE_COMPATIBLE_REDACT_THINKING_BETA),
+    true
+  );
   assert.equal(calls[2].headers["anthropic-beta"], undefined);
+});
+
+test("DefaultExecutor.execute reports the exact serialized provider request before fetch", async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchStarted = false;
+  let fetchBody: any = null;
+  let prepared: any = null;
+  let preparedBeforeFetch = false;
+
+  globalThis.fetch = async (_url, init = {}) => {
+    fetchStarted = true;
+    fetchBody = JSON.parse(String(init.body || "{}"));
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const cc = new DefaultExecutor("anthropic-compatible-cc-test");
+    const requestCapture = {
+      capture(request) {
+        preparedBeforeFetch = !fetchStarted;
+        prepared = request;
+      },
+      body(fallback) {
+        return prepared?.body ?? fallback;
+      },
+      latest() {
+        return prepared;
+      },
+    };
+    const result = await runWithCapture(requestCapture, () =>
+      cc.execute({
+        model: "claude-sonnet-4-6",
+        body: {
+          model: "claude-sonnet-4-6",
+          system: [
+            {
+              type: "text",
+              text: "x-anthropic-billing-header: cc_version=1.0.0; cc_entrypoint=sdk-cli; cch=00000;",
+            },
+          ],
+          messages: [{ role: "user", content: "hi" }],
+          max_tokens: 1,
+          reasoning_effort: "xhigh",
+        },
+        stream: false,
+        credentials: {
+          apiKey: "cc-key",
+          providerSpecificData: {
+            ccSessionId: "session-1",
+          },
+        },
+      })
+    );
+
+    assert.ok(prepared, "prepared request hook should fire before fetch");
+    assert.equal(preparedBeforeFetch, true);
+    assert.deepEqual(prepared.body, fetchBody);
+    assert.deepEqual(result.transformedBody, fetchBody);
+    assert.equal(prepared.body.reasoning_effort, "high");
+    assert.equal(fetchBody.reasoning_effort, "high");
+    assert.match(JSON.stringify(fetchBody), /\bcch=(?!00000)[0-9a-f]{5};/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("DefaultExecutor.execute only injects adaptive thinking defaults for Claude models that support x-high effort", async () => {
@@ -709,6 +848,44 @@ test("DefaultExecutor.transformRequest respects disableStreamOptions for OpenAI 
 
   assert.equal((chatResultDisabled as any).stream_options, undefined);
   assert.deepEqual((chatResultEnabled as any).stream_options, { include_usage: true });
+});
+
+test("DefaultExecutor.transformRequest injects OpenRouter connection preset", () => {
+  const executor = new DefaultExecutor("openrouter");
+  const body = { model: "openai/gpt-4", messages: [{ role: "user", content: "hi" }] };
+
+  const result = executor.transformRequest("openai/gpt-4", body, true, {
+    providerSpecificData: { preset: "  email-copywriter  " },
+  });
+
+  assert.equal((result as any).preset, "email-copywriter");
+  assert.deepEqual((result as any).stream_options, { include_usage: true });
+  assert.equal((body as any).preset, undefined);
+
+  const explicit = executor.transformRequest(
+    "openai/gpt-4",
+    { ...body, preset: "client-preset" },
+    true,
+    { providerSpecificData: { preset: "connection-preset" } }
+  );
+
+  assert.equal((explicit as any).preset, "client-preset");
+
+  const explicitNull = executor.transformRequest("openai/gpt-4", { ...body, preset: null }, true, {
+    providerSpecificData: { preset: "connection-preset" },
+  });
+  assert.equal((explicitNull as any).preset, null);
+
+  const explicitEmpty = executor.transformRequest("openai/gpt-4", { ...body, preset: "" }, true, {
+    providerSpecificData: { preset: "connection-preset" },
+  });
+  assert.equal((explicitEmpty as any).preset, "");
+
+  const blank = executor.transformRequest("openai/gpt-4", body, true, {
+    providerSpecificData: { preset: "   " },
+  });
+
+  assert.equal((blank as any).preset, undefined);
 });
 
 test("DefaultExecutor.transformRequest strips stream_options from Anthropic-compatible targets", () => {

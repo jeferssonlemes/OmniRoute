@@ -34,7 +34,9 @@ export async function requireManagementAuth(request: Request): Promise<Response 
     return null;
   }
 
-  const apiKey = extractApiKey(request);
+  // Management auth never honours a URL-borne credential (header-only) — a token
+  // in the path/query must not authenticate a management route. See #3300 follow-up.
+  const apiKey = extractApiKey(request, { allowUrl: false });
   if (apiKey) {
     let meta: Awaited<ReturnType<typeof getApiKeyMetadata>>;
     try {
@@ -58,7 +60,7 @@ export async function requireManagementAuth(request: Request): Promise<Response 
 
     return createErrorResponse({
       status: 403,
-      message: "API key lacks 'manage' scope. Enable it in the API Manager dashboard.",
+      message: "API key lacks 'manage' scope. Enable it in the API Keys dashboard.",
       type: "invalid_request",
     });
   }

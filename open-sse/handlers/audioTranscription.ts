@@ -21,6 +21,7 @@ import {
 } from "../config/audioRegistry.ts";
 import { buildAuthHeaders } from "../config/registryUtils.ts";
 import { kieExecutor } from "../executors/kie.ts";
+import { vertexTranscribe } from "../executors/vertexMedia.ts";
 import { errorResponse } from "../utils/error.ts";
 
 type TranscriptionCredentials = {
@@ -67,6 +68,45 @@ function isValidPathSegment(segment: string): boolean {
 
 function getUploadedFileName(file: Blob & { name?: unknown }): string {
   return typeof file.name === "string" && file.name.length > 0 ? file.name : "audio.wav";
+}
+
+export async function buildMultipartBody(
+  file: Blob & { name?: unknown },
+  fields: Record<string, string>
+): Promise<{ body: Uint8Array; contentType: string }> {
+  const boundary = "----OmniRouteAudioBoundary" + Date.now().toString(36);
+  const parts: Uint8Array[] = [];
+  const encoder = new TextEncoder();
+
+  for (const [name, value] of Object.entries(fields)) {
+    parts.push(
+      encoder.encode(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`
+      )
+    );
+  }
+
+  const fileName = getUploadedFileName(file)
+    .replace(/["]/g, "_")
+    .replace(/[\r\n]/g, "_");
+  const fileBytes = new Uint8Array(await file.arrayBuffer());
+  parts.push(
+    encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`
+    )
+  );
+  parts.push(fileBytes);
+  parts.push(encoder.encode(`\r\n--${boundary}--\r\n`));
+
+  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+  const body = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const part of parts) {
+    body.set(part, offset);
+    offset += part.length;
+  }
+
+  return { body, contentType: "multipart/form-data; boundary=" + boundary };
 }
 
 /**
@@ -231,14 +271,12 @@ async function handleAssemblyAITranscription(providerConfig, file, modelId, toke
  * Multipart POST, transform response to { text }
  */
 async function handleNvidiaTranscription(providerConfig, file, modelId, token) {
-  const upstreamForm = new FormData();
-  upstreamForm.append("file", file, getUploadedFileName(file));
-  upstreamForm.append("model", modelId);
+  const { body, contentType } = await buildMultipartBody(file, { model: modelId });
 
   const res = await fetch(providerConfig.baseUrl, {
     method: "POST",
-    headers: buildAuthHeaders(providerConfig, token),
-    body: upstreamForm,
+    headers: { ...buildAuthHeaders(providerConfig, token), "Content-Type": contentType },
+    body,
   });
 
   if (!res.ok) {
@@ -425,6 +463,32 @@ export async function handleAudioTranscription({
   }
 
   // Route to provider-specific handler
+  if (providerConfig.format === "vertex-gemini") {
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const uploadedType =
+        typeof (file as { type?: unknown }).type === "string" && (file as { type?: string }).type
+          ? (file as { type: string }).type
+          : "audio/wav";
+      const languageValue = formData.get("language");
+      const promptValue = formData.get("prompt");
+      const text = await vertexTranscribe(credentials ?? {}, {
+        model: modelId as string,
+        audioBase64: buffer.toString("base64"),
+        mimeType: uploadedType,
+        prompt: typeof promptValue === "string" ? promptValue : undefined,
+        language: typeof languageValue === "string" ? languageValue : undefined,
+      });
+      return Response.json({ text }, { headers: { ...CORS_HEADERS } });
+    } catch (err) {
+      const error = err as { message?: string; status?: number };
+      return errorResponse(
+        typeof error?.status === "number" ? error.status : 500,
+        `Vertex transcription failed: ${error?.message || "unknown error"}`
+      );
+    }
+  }
+
   if (providerConfig.format === "deepgram") {
     return handleDeepgramTranscription(providerConfig, file, modelId, token, formData);
   }
@@ -446,11 +510,7 @@ export async function handleAudioTranscription({
   }
 
   // Default: OpenAI/Groq/Qwen3-compatible multipart proxy
-  const upstreamForm = new FormData();
-  upstreamForm.append("file", file, getUploadedFileName(file));
-  upstreamForm.append("model", modelId);
-
-  // Forward optional parameters
+  const extraFields: Record<string, string> = {};
   for (const key of [
     "language",
     "prompt",
@@ -460,15 +520,20 @@ export async function handleAudioTranscription({
   ]) {
     const val = formData.get(key);
     if (val !== null && val !== undefined) {
-      upstreamForm.append(key, /** @type {string} */ val);
+      extraFields[key] = String(val);
     }
   }
+
+  const { body: multipartBody, contentType: multipartCT } = await buildMultipartBody(file, {
+    model: modelId,
+    ...extraFields,
+  });
 
   try {
     const res = await fetch(providerConfig.baseUrl, {
       method: "POST",
-      headers: buildAuthHeaders(providerConfig, token),
-      body: upstreamForm,
+      headers: { ...buildAuthHeaders(providerConfig, token), "Content-Type": multipartCT },
+      body: multipartBody,
     });
 
     if (!res.ok) {
@@ -476,11 +541,11 @@ export async function handleAudioTranscription({
     }
 
     const data = await res.text();
-    const contentType = res.headers.get("content-type") || "application/json";
+    const respContentType = res.headers.get("content-type") || "application/json";
 
     return new Response(data, {
       status: 200,
-      headers: { "Content-Type": contentType },
+      headers: { "Content-Type": respContentType },
     });
   } catch (err) {
     const error = err instanceof Error ? err : new Error(String(err));

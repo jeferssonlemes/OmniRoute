@@ -10,6 +10,31 @@ const { FORMATS } = await import("../../open-sse/translator/formats.ts");
 const { translateRequest } = await import("../../open-sse/translator/index.ts");
 const { cacheReasoningByKey, clearReasoningCacheAll, getReasoningCacheServiceStats } =
   await import("../../open-sse/services/reasoningCache.ts");
+const { clearModelsDevCapabilities, saveModelsDevCapabilities } =
+  await import("../../src/lib/modelsDevSync.ts");
+
+function buildCapability(overrides = {}) {
+  return {
+    tool_call: null,
+    reasoning: null,
+    attachment: null,
+    structured_output: null,
+    temperature: null,
+    modalities_input: "[]",
+    modalities_output: "[]",
+    knowledge_cutoff: null,
+    release_date: null,
+    last_updated: null,
+    status: null,
+    family: null,
+    open_weights: null,
+    limit_context: null,
+    limit_input: null,
+    limit_output: null,
+    interleaved_field: null,
+    ...overrides,
+  };
+}
 
 const originalMathRandom = Math.random;
 
@@ -574,19 +599,29 @@ test("fixMissingToolResponses keeps OpenAI role:tool when assistant uses OpenAI 
   assert.equal(fixed.messages[2].tool_call_id, "call_b");
 });
 
-test("translateRequest replays cached DeepSeek reasoning messages without tool calls", () => {
+test("translateRequest replays cached reasoning-only messages when interleaved field is reasoning_content", () => {
   clearReasoningCacheAll();
+  clearModelsDevCapabilities();
+  saveModelsDevCapabilities({
+    deepseek: {
+      "deepseek-v4-flash": buildCapability({
+        interleaved_field: "reasoning_content",
+        reasoning: true,
+        tool_call: true,
+      }),
+    },
+  });
   cacheReasoningByKey(
     "request:req_reasoning_only:message:0",
     "deepseek",
-    "deepseek-reasoner",
+    "deepseek-v4-flash",
     "cached reasoning only"
   );
 
   const result = translateRequest(
     FORMATS.OPENAI,
     FORMATS.OPENAI,
-    "deepseek-reasoner",
+    "deepseek-v4-flash",
     {
       _reasoningCacheRequestId: "req_reasoning_only",
       messages: [
@@ -601,6 +636,7 @@ test("translateRequest replays cached DeepSeek reasoning messages without tool c
 
   assert.equal(result.messages[1].reasoning_content, "cached reasoning only");
   assert.equal(getReasoningCacheServiceStats().replays, 1);
+  clearModelsDevCapabilities();
   clearReasoningCacheAll();
 });
 
@@ -629,12 +665,23 @@ test("translateRequest does not replay reasoning-only messages for non-DeepSeek 
     "kimi"
   );
 
-  assert.equal(result.messages[1].reasoning_content, "");
+  assert.equal(result.messages[1].reasoning_content, undefined);
   assert.equal(getReasoningCacheServiceStats().replays, 0);
   clearReasoningCacheAll();
+});
 
   test("translateRequest injects thinking block into Claude-format messages for Kimi K2 reasoning models", () => {
     clearReasoningCacheAll();
+    clearModelsDevCapabilities();
+    saveModelsDevCapabilities({
+      "kimi-coding": {
+        "kimi-k2.5": buildCapability({
+          interleaved_field: "reasoning_content",
+          reasoning: true,
+          tool_call: true,
+        }),
+      },
+    });
     cacheReasoningByKey(
       "toolu_kimi_claude",
       "kimi-coding",
@@ -690,11 +737,22 @@ test("translateRequest does not replay reasoning-only messages for non-DeepSeek 
     assert.ok(thinkingIdx < toolUseIdx, "thinking block should be before tool_use");
 
     assert.equal(getReasoningCacheServiceStats().replays, 1);
+    clearModelsDevCapabilities();
     clearReasoningCacheAll();
   });
 
   test("translateRequest injects placeholder thinking block for Claude-format Kimi K2 on cache miss", () => {
     clearReasoningCacheAll();
+    clearModelsDevCapabilities();
+    saveModelsDevCapabilities({
+      "kimi-coding": {
+        "kimi-k2.6": buildCapability({
+          interleaved_field: "reasoning_content",
+          reasoning: true,
+          tool_call: true,
+        }),
+      },
+    });
 
     // No cache seeded - should fall back to placeholder
     const result = translateRequest(
@@ -732,11 +790,22 @@ test("translateRequest does not replay reasoning-only messages for non-DeepSeek 
       "placeholder must be non-empty"
     );
 
+    clearModelsDevCapabilities();
     clearReasoningCacheAll();
   });
 
   test("translateRequest does NOT inject duplicate thinking for Claude-format messages with existing thinking block", () => {
     clearReasoningCacheAll();
+    clearModelsDevCapabilities();
+    saveModelsDevCapabilities({
+      "kimi-coding": {
+        "kimi-k2.5": buildCapability({
+          interleaved_field: "reasoning_content",
+          reasoning: true,
+          tool_call: true,
+        }),
+      },
+    });
 
     const result = translateRequest(
       FORMATS.OPENAI,
@@ -775,6 +844,6 @@ test("translateRequest does not replay reasoning-only messages for non-DeepSeek 
       "original thinking should be preserved"
     );
 
+    clearModelsDevCapabilities();
     clearReasoningCacheAll();
   });
-});

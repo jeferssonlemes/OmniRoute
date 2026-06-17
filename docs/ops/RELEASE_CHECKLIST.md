@@ -112,7 +112,7 @@ Breaking changes: add `BREAKING CHANGE:` footer or `!` after the scope (e.g. `fe
 
 - [ ] `npm run i18n:check` exits 0 — translation state (`.i18n-state.json`) in sync with source docs (no drifted sources in strict mode; warn-mode advisory is acceptable for last-minute doc touch-ups, but should be 0 before tagging)
 - [ ] `npm run i18n:check-ui-coverage` exits 0 — every UI locale at or above the 80% coverage floor
-- [ ] `npm run i18n:sync-ui:dry` reports 0 missing keys across all 40 locales
+- [ ] `npm run i18n:sync-ui:dry` reports 0 missing keys across all 42 locales
 - [ ] If source English docs changed, run `npm run i18n:run` (requires `OMNIROUTE_TRANSLATION_API_KEY` in `.env`) before tagging
 - [ ] Translation contributions can be deferred to next release if minor (track in CHANGELOG)
 
@@ -147,11 +147,38 @@ If `electron/` changed:
 - [ ] `electron/package.json` version matches root `package.json`
 - [ ] Auto-update channel pointer updated if releasing to `stable`
 
+### Build Layout
+
+The repository uses three distinct output directories — never mix them up:
+
+| Directory | Purpose                                                  | Tracked?        |
+| --------- | -------------------------------------------------------- | --------------- |
+| `src/`    | Application source (TypeScript / TSX)                    | Yes             |
+| `.build/` | Build intermediates — `next build` output (`distDir`)    | No (gitignored) |
+| `dist/`   | Shippable npm bundle — assembled by `assembleStandalone` | No (gitignored) |
+
+> **Operator note:** the remote VPS image directory remains `/usr/lib/node_modules/omniroute/app/`.
+> Only the **in-repo** build output moved (`app/` → `dist/`). The deploy skills rsync
+> `dist/` contents into the remote `app/` dir — no VPS path changes required.
+
+**Single-build flow:**
+
+```
+npm run build:release
+  └─ rm -rf .build dist          (clean)
+  └─ next build → .build/next/   (intermediates)
+  └─ assembleStandalone          (copies standalone + static + public + natives → dist/)
+  └─ writes dist/BUILD_SHA       (HEAD sentinel)
+```
+
+Do NOT run `npm run build` followed by a separate `npm run build:cli` for deploy — use
+`npm run build:release` which does a clean rebuild + sentinel in one command.
+
 ### Artifact Validation
 
-- [ ] `npm run build:cli` succeeds
+- [ ] `npm run build:release` succeeds and `dist/BUILD_SHA` == `git rev-parse --short HEAD`
 - [ ] `npm run check:pack-artifact` clean — no `app.__qa_backup`, `scripts/scratch`, `package-lock.json`, or other local residue
-- [ ] `npm run build` produces a working standalone Next.js bundle
+- [ ] `dist/server.js` exists after build
 
 ### Tagging & Release
 
@@ -169,10 +196,14 @@ If `electron/` changed:
 
 ### Deploy
 
+Deploy skills use the light rsync flow — no `npm pack`, no `npm i -g`:
+
 - [ ] Use deploy skill that matches target:
   - `/deploy-vps-local-cc` — local VPS (192.168.0.15)
   - `/deploy-vps-akamai-cc` — Akamai VPS (69.164.221.35)
   - `/deploy-vps-both-cc` — both
+- [ ] Before deploying, confirm `dist/BUILD_SHA` == `git rev-parse --short HEAD`
+- [ ] Build must run where `node_modules` is real (main checkout or `npm ci`'d worktree — NOT a symlinked worktree)
 - [ ] Smoke test deployed instance:
   - Open `/dashboard/health` → check version string matches release
   - Run a `/v1/chat/completions` request against a known provider
