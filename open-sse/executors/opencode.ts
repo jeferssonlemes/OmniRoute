@@ -7,6 +7,10 @@ import {
 } from "./base.ts";
 import { PROVIDERS } from "../config/constants.ts";
 import { getModelTargetFormat } from "../config/providerModels.ts";
+import {
+  injectReasoningContentForThinkingModel,
+  isThinkingMessageModel,
+} from "../utils/reasoningContentInjector.ts";
 
 export class OpencodeExecutor extends BaseExecutor {
   _requestFormat: string | null = null;
@@ -138,7 +142,7 @@ export class OpencodeExecutor extends BaseExecutor {
     stream: boolean,
     credentials: ProviderCredentials
   ): any {
-    const modifiedBody = super.transformRequest(model, body, stream, credentials);
+    let modifiedBody = super.transformRequest(model, body, stream, credentials);
     if (
       modifiedBody &&
       typeof modifiedBody === "object" &&
@@ -146,6 +150,29 @@ export class OpencodeExecutor extends BaseExecutor {
       modifiedBody.tools.length > 128
     ) {
       modifiedBody.tools = modifiedBody.tools.slice(0, 128);
+    }
+    if (modifiedBody && typeof modifiedBody === "object" && !Array.isArray(modifiedBody)) {
+      const mb = modifiedBody as Record<string, unknown>;
+      const m = String(model || "");
+      const effortLevels = ["low", "medium", "high", "max"] as const;
+      const matchedLevel = effortLevels.find((level) => m.endsWith(`-${level}`));
+      if (matchedLevel) {
+        const base = m.slice(0, -matchedLevel.length - 1);
+        if (base.toLowerCase() === "deepseek-v4-pro") {
+          mb.model = "deepseek-v4-pro";
+          if (mb.reasoning_effort === undefined) {
+            mb.reasoning_effort = matchedLevel;
+          }
+        }
+      }
+    }
+    // #1543 / upstream PR #1099: thinking-mode upstreams routed through OpenCode
+    // (DeepSeek V4 Flash, Kimi, MiniMax, ...) require reasoning_content echoed
+    // back on assistant messages, or they 400 with "reasoning_content must be
+    // passed back". OpenAI clients drop it across turns, so we inject a
+    // placeholder for the affected model families.
+    if (isThinkingMessageModel(model)) {
+      modifiedBody = injectReasoningContentForThinkingModel(modifiedBody);
     }
     return modifiedBody;
   }

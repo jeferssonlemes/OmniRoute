@@ -31,7 +31,7 @@ Runs on every PR to `main`. Blocks merge on failure.
 | `check:provider-consistency`   | Every provider in `providers.ts` has a matching entry in `providerRegistry.ts` (and vice-versa, within the allowlist)                                              | Yes                                      |
 | `check:fetch-targets`          | Every `fetch("/api/...")` in client-side `src/` resolves to a real `route.ts`                                                                                      | Yes                                      |
 | `check:deps`                   | All `npm install`-able deps across every `package.json` in the repo are in `dependency-allowlist.json`; new unpinned or slopsquatted packages flagged              | Yes                                      |
-| `audit:deps`                   | `npm audit` (root + electron) — no high/critical advisories (overlaps osv `check:vuln-ratchet`; see Rationalization Backlog)                                        | Yes                                      |
+| `audit:deps`                   | `npm audit` (root + electron) — no high/critical advisories (overlaps osv `check:vuln-ratchet`; see Rationalization Backlog)                                       | Yes                                      |
 | `check:lockfile`               | `package-lock.json` integrity — https registry, integrity hashes, no host overrides                                                                                | Yes                                      |
 | `check:licenses`               | SPDX license allowlist for production dependencies                                                                                                                 | Yes                                      |
 | `check:tracked-artifacts`      | No build artifacts / committed `node_modules` symlinks (also runs in husky pre-push)                                                                               | Yes                                      |
@@ -51,16 +51,16 @@ Runs on every PR to `main`. Blocks merge on failure.
 
 Runs after `test-coverage`. Blocks merge on failure.
 
-| Script              | Validates                                                                                                  | Blocking                  |
-| ------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `quality:collect`   | Emits `quality-metrics.json` (ESLint warning count, coverage from merged shard report)                     | Yes (upstream of ratchet) |
-| `quality:ratchet`   | Each metric in `quality-baseline.json` has not regressed (ESLint warnings ≤ baseline; coverage ≥ baseline) | Yes                       |
-| `check:duplication` | Code duplication (jscpd@4) does not exceed baseline in `quality-baseline.json`                             | Yes                       |
-| `check:complexity`  | File-level cyclomatic complexity does not exceed the cap (core ESLint `complexity` + `max-lines-per-function`)         | Yes                       |
-| `check:cognitive-complexity` | Cognitive complexity ratchet (`eslint-plugin-sonarjs`) — separate ESLint pass; mergeable with `check:complexity` (see Backlog) | Yes              |
-| `check:dead-code`   | Unused exports / files ratchet (knip) does not regress vs baseline                                         | Yes                       |
-| `check:type-coverage` | Percent-typed ratchet (`type-coverage`) does not regress; largely subsumes `typecheck:noimplicit:core`   | Yes                       |
-| `check:codeql-ratchet` | Open CodeQL alert count does not regress (reads via `gh api`; graceful-skip without token)              | Yes                       |
+| Script                       | Validates                                                                                                                      | Blocking                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `quality:collect`            | Emits `quality-metrics.json` (ESLint warning count, coverage from merged shard report)                                         | Yes (upstream of ratchet) |
+| `quality:ratchet`            | Each metric in `quality-baseline.json` has not regressed (ESLint warnings ≤ baseline; coverage ≥ baseline)                     | Yes                       |
+| `check:duplication`          | Code duplication (jscpd@4) does not exceed baseline in `quality-baseline.json`                                                 | Yes                       |
+| `check:complexity`           | File-level cyclomatic complexity does not exceed the cap (core ESLint `complexity` + `max-lines-per-function`)                 | Yes                       |
+| `check:cognitive-complexity` | Cognitive complexity ratchet (`eslint-plugin-sonarjs`) — separate ESLint pass; mergeable with `check:complexity` (see Backlog) | Yes                       |
+| `check:dead-code`            | Unused exports / files ratchet (knip) does not regress vs baseline                                                             | Yes                       |
+| `check:type-coverage`        | Percent-typed ratchet (`type-coverage`) does not regress; largely subsumes `typecheck:noimplicit:core`                         | Yes                       |
+| `check:codeql-ratchet`       | Open CodeQL alert count does not regress (reads via `gh api`; graceful-skip without token)                                     | Yes                       |
 
 ### Job: `quality-extended`
 
@@ -134,12 +134,12 @@ Runs after `build`. Blocks merge on failure.
 
 These run on a cron schedule (and `workflow_dispatch`), never on PRs. All are advisory.
 
-| Workflow               | Validates                                                                                                                                                     | Blocking     |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
-| `nightly-property`     | fast-check property tests with a random seed + high run count                                                                                                 | **Advisory** |
-| `nightly-resilience`   | heap-growth gate, chaos fault-injection, k6 load/soak                                                                                                         | **Advisory** |
-| `nightly-llm-security` | promptfoo injection guard (block mode) + garak probes (skipped without a provider secret)                                                                     | **Advisory** |
-| `nightly-schemathesis` | OpenAPI contract fuzzing (schemathesis) against a live OmniRoute using `docs/reference/openapi.yaml` — surfaces spec violations / unhandled 500s (Fase 8 B.4) | **Advisory** |
+| Workflow               | Validates                                                                                                                                           | Blocking     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| `nightly-property`     | fast-check property tests with a random seed + high run count                                                                                       | **Advisory** |
+| `nightly-resilience`   | heap-growth gate, chaos fault-injection, k6 load/soak                                                                                               | **Advisory** |
+| `nightly-llm-security` | promptfoo injection guard (block mode) + garak probes (skipped without a provider secret)                                                           | **Advisory** |
+| `nightly-schemathesis` | OpenAPI contract fuzzing (schemathesis) against a live OmniRoute using `docs/openapi.yaml` — surfaces spec violations / unhandled 500s (Fase 8 B.4) | **Advisory** |
 
 ---
 
@@ -257,7 +257,7 @@ Each candidate was validated against the live gate state on 2026-06-17 (trust-bu
 several "obvious" merges turned out to hide debt and are **not** clean drop-ins.
 
 - **`check:docs-sync` runs twice** — standalone in the `lint` job and again inside `check:docs-all` (`docs-sync-strict`) and the husky pre-commit hook. ✅ **DONE** — standalone `lint` invocation removed.
-- **CVE scanning** — ❌ **NOT a clean merge.** `audit:deps` hard-fails on any high/critical CVE; `check:vuln-ratchet` (osv) only fails on a *regression* vs baseline (currently 1 MODERATE). Different semantics — dropping `audit:deps` would lose the absolute high/critical gate. Keep both.
+- **CVE scanning** — ❌ **NOT a clean merge.** `audit:deps` hard-fails on any high/critical CVE; `check:vuln-ratchet` (osv) only fails on a _regression_ vs baseline (currently 1 MODERATE). Different semantics — dropping `audit:deps` would lose the absolute high/critical gate. Keep both.
 - **Cycle detection** — ❌ **NOT a clean merge.** `check:circular-deps` (dpdm) reports **91 cycles** (that is why it is advisory); it cannot be promoted to blocking without first resolving them, and it has a broader scope than the green, curated `check:cycles`. Keep `check:cycles` blocking; resolving the 91 dpdm cycles is its own backlog.
 - **Complexity** — ⏳ valid but real surgery. `check:complexity` (core ESLint) + `check:cognitive-complexity` (sonarjs) are two ESLint passes over `src` + `open-sse`; merging into one config emitting both metrics needs careful ratchet re-wiring. Deferred.
 - **`/api` anti-hallucination** — ⏳ valid but script surgery. `check:openapi-routes` (spec→route) + `check:docs-symbols` (prose→route) share resolution logic; collapsing them is a non-trivial script change. Deferred.

@@ -2,7 +2,7 @@
  * Shared combo (model combo) handling with fallback support
  * Supports: priority, weighted, round-robin, random, least-used, cost-optimized,
  * reset-aware, reset-window, strict-random, auto, fill-first, p2c, lkgp,
- * context-optimized, and context-relay strategies
+ * context-optimized, context-relay, and fusion strategies
  */
 
 import {
@@ -10,6 +10,7 @@ import {
   classifyLockoutReason,
   decayModelFailureCount,
   formatRetryAfter,
+  getModelLockoutInfo,
   getRuntimeProviderProfile,
   isModelLocked,
   recordModelLockoutFailure,
@@ -73,6 +74,12 @@ import {
 import { supportsToolCalling } from "./modelCapabilities.ts";
 import { estimateTokens } from "./contextManager.ts";
 import { getSessionConnection } from "./sessionManager.ts";
+import { applySessionStickiness, recordStickyBinding } from "./combo/sessionStickiness.ts";
+import { selectQuotaShareTarget } from "./combo/quotaShareStrategy.ts";
+import {
+  resolveMaxConcurrentByConnection,
+  makeConnectionConcurrencyResolver,
+} from "./combo/concurrencyCaps.ts";
 import { orderTargetsByEvalScores } from "./evalRouting.ts";
 import { generateRoutingHints } from "./manifestAdapter";
 import type { RoutingHint } from "./manifestAdapter";
@@ -118,6 +125,12 @@ import {
   recordStickyWeightedSuccess,
 } from "./combo/rrState.ts";
 import { validateResponseQuality, toRetryAfterDisplayValue } from "./combo/validateQuality.ts";
+import { resolveComboCooldownWaitDecision } from "./combo/comboCooldownRetry.ts";
+import {
+  computeClosestRetryAfter,
+  waitForCooldownAwareRetry,
+} from "../../src/sse/services/cooldownAwareRetry.ts";
+import { handleFusionChat, type FusionTuning } from "./fusion.ts";
 import {
   TRANSIENT_FOR_SEMAPHORE,
   MAX_FALLBACK_WAIT_MS,
@@ -178,8 +191,15 @@ import {
   preScreenTargets,
   orderTargetsByResetAwareQuota,
   orderTargetsByResetWindow,
+  orderTargetsByHeadroom,
   type PreScreenResult,
 } from "./combo/quotaStrategies.ts";
+import {
+  classifyTask,
+  getConversationCacheKey,
+  isTaskRoutingStrategy,
+  reorderByTaskWeight,
+} from "./taskAwareRouting.ts";
 
 // Backward-compatible re-exports — these were public from combo.ts before the
 // types extraction (Quality Gate v2 / Fase 9). Keep the external surface stable.
@@ -324,6 +344,36 @@ function quotaRemainingPercentFromQuota(quota: unknown): number {
   const percentUsed = Number(record.percentUsed);
   if (Number.isFinite(percentUsed)) return clampPercent((1 - percentUsed) * 100);
   return 100;
+}
+
+const QUOTA_BLOCKING_CONNECTION_STATUSES = new Set([
+  "banned",
+  "credits_exhausted",
+  "deactivated",
+  "expired",
+  "rate_limited",
+]);
+
+function normalizeConnectionStatus(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function hasFutureRateLimitUntil(value: unknown): boolean {
+  if (value == null || value === "") return false;
+  const time = new Date(String(value)).getTime();
+  return Number.isFinite(time) && time > Date.now();
+}
+
+export function getConnectionStatusQuotaCutoffReason(
+  connection: Record<string, unknown> | undefined
+): string | undefined {
+  if (!connection) return undefined;
+  const status = normalizeConnectionStatus(connection.testStatus);
+  if (QUOTA_BLOCKING_CONNECTION_STATUSES.has(status)) return status;
+  if (status === "unavailable" && hasFutureRateLimitUntil(connection.rateLimitedUntil)) {
+    return "rate_limited";
+  }
+  return undefined;
 }
 
 export async function buildAutoCandidates(
@@ -473,6 +523,19 @@ export async function buildAutoCandidates(
       let quotaCutoffReason: string | undefined;
       const fetcher = getQuotaFetcher(provider);
       const connection = target.connectionId ? connectionById.get(target.connectionId) : undefined;
+      // Gate the terminal-status cutoff behind the same opt-in as the quota-percent
+      // cutoff (#4483): when quota cutoff is disabled, a connection in a terminal
+      // testStatus must still fall through to normal connection-cooldown / model-lockout
+      // handling instead of being hard-blocked here (which would surface a misleading
+      // "below quota cutoff" 429 when every candidate is transiently unavailable).
+      const statusCutoffReason = quotaCutoffEnabled
+        ? getConnectionStatusQuotaCutoffReason(connection)
+        : undefined;
+      if (statusCutoffReason) {
+        quotaCutoffBlocked = true;
+        quotaCutoffReason = statusCutoffReason;
+        quotaRemaining = 0;
+      }
       if (fetcher && target.connectionId) {
         const quotaKey = `${provider}:${target.connectionId}`;
         if (!quotaPromises.has(quotaKey)) {
@@ -491,8 +554,10 @@ export async function buildAutoCandidates(
         }
         const quota = await quotaPromises.get(quotaKey)!;
         resetWindowAffinity = calculateResetWindowAffinity(quota, resetWindowConfig);
-        quotaRemaining = quotaRemainingPercentFromQuota(quota);
-        if (quotaCutoffEnabled) {
+        if (!quotaCutoffBlocked) {
+          quotaRemaining = quotaRemainingPercentFromQuota(quota);
+        }
+        if (!quotaCutoffBlocked && quotaCutoffEnabled) {
           const cutoffDecision = evaluateQuotaCutoff(
             quota as QuotaInfo | null,
             buildAutoQuotaThresholds(provider, connection, resilienceSettings)
@@ -534,6 +599,72 @@ export async function buildAutoCandidates(
     const hiddenModels = hiddenModelsMap.get(c.provider);
     return !hiddenModels?.has(c.model);
   });
+}
+
+const TERMINAL_PIN_STATUSES = new Set(["credits_exhausted", "banned", "expired"]);
+
+/**
+ * Pure decision: should a context-cache pin be DROPPED because its provider has
+ * DURABLY fallen? A ccp pin keeps the prompt cache warm by bypassing the combo
+ * strategy — but if the pinned provider is dead (credits exhausted / banned /
+ * expired, circuit-open, repeated failures, or a long rate-limit) honoring the
+ * pin pounds a dead account forever with no failover (laila throttle + credits
+ * incidents, 2026-06-22). A brief transient cooldown is tolerated (pin kept) so
+ * an unstable provider does not churn the pin every turn. Connection-level
+ * `backoffLevel` already resets on success, so `backoffLevel >= K` ≈ K
+ * consecutive failures — no per-session counter needed.
+ *
+ * Returns true ⇒ drop the pin and use the strategy. Pure + unit-testable.
+ */
+export function pinIsDurablyUnhealthy(
+  circuitState: string | undefined,
+  connections: Array<{
+    testStatus?: string | null;
+    backoffLevel?: number | null;
+    rateLimitedUntil?: string | null;
+  }>,
+  now: number,
+  opts: { backoffLevel?: number; graceMs?: number } = {}
+): boolean {
+  if (circuitState === "OPEN") return true;
+  if (!Array.isArray(connections) || connections.length === 0) return true;
+  const backoffThreshold = opts.backoffLevel ?? Number(process.env.PIN_DROP_BACKOFF_LEVEL || "2");
+  const graceMs = opts.graceMs ?? Number(process.env.PIN_DROP_GRACE_MS || "20000");
+  // The pin survives as long as AT LEAST ONE connection is healthy or only
+  // briefly cooling down — failover only when every connection is durably down.
+  const anyUsable = connections.some((c) => {
+    const status = typeof c.testStatus === "string" ? c.testStatus : "";
+    if (TERMINAL_PIN_STATUSES.has(status)) return false;
+    if (Number(c.backoffLevel ?? 0) >= backoffThreshold) return false;
+    const rl = c.rateLimitedUntil ? new Date(String(c.rateLimitedUntil)).getTime() : 0;
+    if (Number.isFinite(rl) && rl - now > graceMs) return false;
+    return true;
+  });
+  return !anyUsable;
+}
+
+/**
+ * Async wrapper: resolve the pinned model's provider, read its circuit state and
+ * active connections, and decide via {@link pinIsDurablyUnhealthy}. Fail-open
+ * (return false) on any error so a lookup bug never drops a healthy pin.
+ */
+async function isPinnedModelDurablyUnhealthy(pinnedModel: string): Promise<boolean> {
+  try {
+    const provider = parseModel(pinnedModel).provider;
+    if (!provider) return false;
+    const circuitState = getCircuitBreaker(provider)?.getStatus?.()?.state;
+    const connections = (await getProviderConnections({
+      provider,
+      isActive: true,
+    })) as Array<{
+      testStatus?: string | null;
+      backoffLevel?: number | null;
+      rateLimitedUntil?: string | null;
+    }>;
+    return pinIsDurablyUnhealthy(circuitState, connections || [], Date.now());
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -685,11 +816,74 @@ export async function handleComboChat({
 
   // Route to pinned model if context caching specifies one (Fix #679)
   if (pinnedModel) {
-    log.info(
+    // The pin is read from session_model_history (a PRIOR turn) and may name a
+    // model that has since been removed from this combo, or a provider whose
+    // credentials are gone. Without this guard a stale pin bypasses the strategy
+    // and routes to a dead model forever — incident 2026-06-21: cli-claude-heavy
+    // pinned to a deepseek connection with no active credentials → instant fail,
+    // never falling through to the live targets; and combos re-pointed Opus→Sonnet
+    // kept serving the old model. Validate the pin is still reachable in THIS
+    // combo's resolved targets (refs flattened) before honoring it. Only validate
+    // when allCombos is authoritative (non-empty) so we can resolve combo-refs;
+    // the auto-combo redirect path passes an empty list and keeps prior behavior.
+    const haveFullCombos = Array.isArray(allCombos) ? allCombos.length > 0 : !!allCombos;
+    const pinInCombo =
+      !haveFullCombos ||
+      resolveComboTargets(combo, allCombos, clampComboDepth(config.maxComboDepth)).some(
+        (t) => t.modelStr === pinnedModel
+      );
+    // Honor the pin only if it is still a combo target AND its provider is not
+    // DURABLY down. Without the health gate a pin keeps routing a session to a
+    // dead/credits-exhausted/throttled account forever (strategy bypassed, no
+    // failover) — incident 2026-06-22: laila stuck on a throttled claude account
+    // and credits_exhausted accounts never failing over. A transient cooldown is
+    // tolerated (pin kept) so an unstable provider does not churn the pin.
+    const pinDurablyDown = pinInCombo ? await isPinnedModelDurablyUnhealthy(pinnedModel) : false;
+    if (pinInCombo && !pinDurablyDown) {
+      log.info(
+        "COMBO",
+        `Bypassing strategy — routing directly to pinned context model: ${pinnedModel}`
+      );
+      return handleSingleModelWithTimeout(body, pinnedModel);
+    }
+    log.warn(
       "COMBO",
-      `Bypassing strategy — routing directly to pinned context model: ${pinnedModel}`
+      pinInCombo
+        ? `Context-cache pin "${pinnedModel}" provider durably unhealthy — dropping pin, using strategy`
+        : `Stale context-cache pin "${pinnedModel}" not in combo "${combo.name}" targets — dropping pin, using strategy`
     );
     return handleSingleModelWithTimeout(body, pinnedModel);
+  }
+
+  // Fusion strategy: parallel panel + judge synthesis. Handled in a separate module
+  // because it neither iterates targets in order nor needs the failover/retry/credential
+  // gate machinery that follows — it fans out, then synthesizes once.
+  if (strategy === "fusion") {
+    const fusionModels = (combo.models || [])
+      .map((m) => {
+        if (typeof m === "string") return m;
+        if (m && typeof m === "object") {
+          const obj = m as Record<string, unknown>;
+          if (typeof obj.model === "string") return obj.model;
+        }
+        return null;
+      })
+      .filter((m): m is string => Boolean(m));
+    const cfg = config as Record<string, unknown>;
+    const judgeModel = typeof cfg.judgeModel === "string" ? cfg.judgeModel : undefined;
+    const tuning =
+      cfg.fusionTuning && typeof cfg.fusionTuning === "object"
+        ? (cfg.fusionTuning as FusionTuning)
+        : undefined;
+    return handleFusionChat({
+      body,
+      models: fusionModels,
+      handleSingleModel: handleSingleModelWithTimeout,
+      log,
+      comboName: combo.name,
+      judgeModel,
+      tuning,
+    });
   }
 
   const nestingContext = nesting || {
@@ -840,7 +1034,8 @@ export async function handleComboChat({
 
   const isTargetSelectableForWeighted = async (target: ResolvedComboTarget): Promise<boolean> => {
     const rawModel = parseModel(target.modelStr).model || target.modelStr;
-    if (target.provider && getCircuitBreaker(target.provider).getStatus().state === "OPEN") return false;
+    if (target.provider && getCircuitBreaker(target.provider).getStatus().state === "OPEN")
+      return false;
     if (
       resilienceSettings.providerCooldown.enabled &&
       Boolean(target.provider && target.provider !== "unknown") &&
@@ -918,16 +1113,21 @@ export async function handleComboChat({
       : null;
   const getWeightedStepKeyForTarget = (target: ResolvedComboTarget): string | null => {
     if (!weightedResolution?.orderedSteps) return null;
-    const step = weightedResolution.orderedSteps.find((entry) =>
-      target.executionKey === entry.executionKey ||
-      target.executionKey.startsWith(entry.executionKey + ">")
+    const step = weightedResolution.orderedSteps.find(
+      (entry) =>
+        target.executionKey === entry.executionKey ||
+        target.executionKey.startsWith(entry.executionKey + ">")
     );
     return step?.executionKey || null;
   };
   let orderedTargets =
     strategy === "weighted"
       ? weightedResolution?.orderedTargets || []
-      : resolveComboTargets(expandedCombo, expandedAllCombos, clampComboDepth(config.maxComboDepth));
+      : resolveComboTargets(
+          expandedCombo,
+          expandedAllCombos,
+          clampComboDepth(config.maxComboDepth)
+        );
 
   orderedTargets = await applyRequestTagRouting(orderedTargets, body, log);
 
@@ -1365,10 +1565,57 @@ export async function handleComboChat({
   } else if (strategy === "context-optimized") {
     orderedTargets = sortTargetsByContextSize(orderedTargets);
     log.info("COMBO", `Context-optimized ordering: largest first (${orderedTargets[0]?.modelStr})`);
+  } else if (strategy === "headroom") {
+    orderedTargets = await orderTargetsByHeadroom(
+      orderedTargets,
+      combo.name,
+      log,
+      apiKeyAllowedConnections
+    );
+    log.info(
+      "COMBO",
+      `Headroom ordering: ${orderedTargets[0]?.modelStr}${orderedTargets[0]?.connectionId ? ` (${orderedTargets[0].connectionId})` : ""} has most free capacity`
+    );
+  } else if (strategy === "quota-share") {
+    // Internal quota-share combos (qtSd/): delegate to the dedicated module (DRR +
+    // P2C in-flight + per-model bucket gating + per-connection concurrency gating).
+    const qsModel =
+      typeof body?.model === "string" ? body.model : (orderedTargets[0]?.modelStr ?? "");
+    const qsMaxConcurrent = await resolveMaxConcurrentByConnection(orderedTargets);
+    orderedTargets = selectQuotaShareTarget(orderedTargets, combo.name, qsModel, Date.now(), {
+      maxConcurrentByConnection: qsMaxConcurrent,
+    }).orderedTargets;
+    log.info(
+      "COMBO",
+      `Quota-share ordering: ${orderedTargets[0]?.modelStr}${orderedTargets[0]?.connectionId ? ` (${orderedTargets[0].connectionId})` : ""} selected (DRR+P2C)`
+    );
   }
-
+  const _sticky = await applySessionStickiness(
+    orderedTargets,
+    body.messages as Array<{ role?: string; content?: unknown }>
+  );
+  orderedTargets = _sticky.targets;
   orderedTargets = orderTargetsByEvalScores(orderedTargets, config.evalRouting, log);
   orderedTargets = filterTargetsByRequestCompatibility(orderedTargets, body, log);
+
+  // Task-aware reordering: only active for strategies ["smart","task","task-aware","task_aware","auto"].
+  // Additive — does not affect any of the other 15 strategies.
+  if (isTaskRoutingStrategy(strategy)) {
+    const task = classifyTask(body);
+    const conversationCacheKey = getConversationCacheKey(body);
+    const taskReordered = reorderByTaskWeight(orderedTargets, task);
+    if (taskReordered[0]?.modelStr !== orderedTargets[0]?.modelStr) {
+      const reasons =
+        Array.isArray(task.reasons) && task.reasons.length > 0
+          ? ` (${task.reasons.join(",")})`
+          : "";
+      log.info(
+        "COMBO",
+        `task-route task=${task.level}${reasons} cacheKey=${conversationCacheKey ?? "none"} → ${taskReordered[0]?.modelStr}`
+      );
+    }
+    orderedTargets = taskReordered;
+  }
 
   // Parallel pre-screen: check provider profiles and model availability for all targets
   // Only runs for priority strategy where sequential checking causes latency
@@ -1400,7 +1647,27 @@ export async function handleComboChat({
 
   let globalAttempts = 0;
 
-  try {
+  // Quota-share cooldown-aware retry (Variante A). Only quota-share (qtSd/)
+  // combos opt in: when the set loop would crystallize a 429 model_cooldown
+  // because the target hit a SHORT transient cooldown, we wait it out and
+  // re-run the whole set loop instead of propagating the 429. `globalAttempts`
+  // persists across these waits so MAX_GLOBAL_ATTEMPTS still bounds total work.
+  // The wait happens at the crystallization point, which holds no semaphore slot
+  // (the quota-share path never calls semaphore.acquire) and no explicit
+  // in-flight lease that must be released here.
+  //
+  // The set loop is wrapped in a small recursive closure rather than an extra
+  // labelled `while (true)` so the loop body keeps its original indentation; a
+  // wait+redispatch is a tail `return dispatchWithCooldownRetry()`, which
+  // re-runs ONLY the set loop (selection / shadow routing / setup above stay
+  // untouched), preserving the pre-existing `continue`-to-top-of-set-loop
+  // semantics exactly.
+  const comboCooldownWaitEnabled =
+    strategy === "quota-share" && resilienceSettings.comboCooldownWait.enabled;
+  let comboCooldownAttempt = 0;
+  let comboCooldownBudgetLeftMs = resilienceSettings.comboCooldownWait.budgetMs;
+
+  const dispatchWithCooldownRetry = async (): Promise<Response> => {
     for (let setTry = 0; setTry <= maxSetRetries; setTry++) {
       // #1731: Per-set-iteration set of providers whose quota is fully exhausted.
       // Reset each retry so providers excluded in a previous attempt get another chance.
@@ -1901,8 +2168,8 @@ export async function handleComboChat({
                 }
               }
             }
-
-            // Record last known good provider (LKGP) for this combo/model (#919)
+            if (_sticky.messageHash && target.connectionId)
+              recordStickyBinding(_sticky.messageHash, target.connectionId); // LKGP (#919):
             if (provider) {
               const connId = effectiveConnectionId || undefined;
               void (async () => {
@@ -2324,6 +2591,43 @@ export async function handleComboChat({
       const msg = lastError || "All combo models unavailable";
 
       if (earliestRetryAfter) {
+        // Quota-share cooldown-aware retry: instead of crystallizing the 429,
+        // wait out a SHORT transient cooldown and re-run the whole set loop.
+        // Guarded by the helper (quota_exhausted/auth/not-found excluded,
+        // ceiling, attempts, budget). MAX_GLOBAL_ATTEMPTS still bounds total
+        // dispatches.
+        if (comboCooldownWaitEnabled && status === 429) {
+          const decision = resolveComboCooldownWaitDecision({
+            targets: orderedTargets,
+            earliestRetryAfter,
+            attempt: comboCooldownAttempt,
+            budgetLeftMs: comboCooldownBudgetLeftMs,
+            settings: resilienceSettings.comboCooldownWait,
+            lookupLock: (provider, connectionId) => {
+              const rawModel = parseModel(orderedTargets[0]?.modelStr ?? "").model || "";
+              return getModelLockoutInfo(provider, connectionId, rawModel);
+            },
+            computeWaitMs: (retryAfter) => computeClosestRetryAfter(retryAfter).waitMs,
+          });
+          if (decision.wait) {
+            log.info(
+              "COMBO",
+              `Quota-share cooldown wait: ${msg} — waiting ${Math.ceil(
+                decision.waitMs / 1000
+              )}s (reason=${decision.reason ?? "?"}) then retrying (attempt ${
+                comboCooldownAttempt + 1
+              }/${resilienceSettings.comboCooldownWait.maxAttempts})`
+            );
+            const completed = await waitForCooldownAwareRetry(decision.waitMs, signal);
+            if (!completed) {
+              log.info("COMBO", "Quota-share cooldown wait aborted by client disconnect");
+              return errorResponse(499, "Request aborted");
+            }
+            comboCooldownAttempt += 1;
+            comboCooldownBudgetLeftMs = Math.max(0, comboCooldownBudgetLeftMs - decision.waitMs);
+            return dispatchWithCooldownRetry();
+          }
+        }
         const retryHuman = formatRetryAfter(toRetryAfterDisplayValue(earliestRetryAfter));
         log.warn("COMBO", `All models failed | ${msg} (${retryHuman})`);
         return unavailableResponse(status, msg, earliestRetryAfter, retryHuman);
@@ -2337,6 +2641,10 @@ export async function handleComboChat({
     }
 
     return errorResponse(503, "Combo routing completed without an upstream response");
+  };
+
+  try {
+    return await dispatchWithCooldownRetry();
   } finally {
     // G2: Clean up candidate registry to prevent unbounded memory growth.
     _unregisterExecutionCandidates(_registeredExecutionKeys);
@@ -2368,6 +2676,10 @@ async function handleRoundRobinCombo({
     ? resolveComboConfig(combo, settings)
     : { ...getDefaultComboConfig(), ...(combo.config || {}) };
   const concurrency = config.concurrencyPerModel ?? 3;
+  // Honor each target connection's own maxConcurrent ceiling (cached per dispatch)
+  // so a low-concurrency subscription account is not flooded; falls back to the
+  // combo-level concurrency when the connection has no positive cap.
+  const resolveTargetConcurrency = makeConnectionConcurrencyResolver(concurrency);
   const queueTimeout = config.queueTimeoutMs ?? 30000;
   // #3872: pre-cascade queue depth — lower values fail over to the next combo member
   // sooner under concurrency saturation (0 = never queue). Default 20 (backward-compat).
@@ -2449,7 +2761,8 @@ async function handleRoundRobinCombo({
       if (stickyTarget) {
         const rawModel = parseModel(stickyTarget.modelStr).model || stickyTarget.modelStr;
         const stickyAvailable =
-          (!stickyTarget.provider || getCircuitBreaker(stickyTarget.provider).getStatus().state !== "OPEN") &&
+          (!stickyTarget.provider ||
+            getCircuitBreaker(stickyTarget.provider).getStatus().state !== "OPEN") &&
           !(
             resilienceSettings.providerCooldown.enabled &&
             Boolean(stickyTarget.provider && stickyTarget.provider !== "unknown") &&
@@ -2566,11 +2879,13 @@ async function handleRoundRobinCombo({
       continue;
     }
 
-    // Acquire semaphore slot (may wait in queue)
+    // Acquire semaphore slot (may wait in queue). Honor the connection's own
+    // maxConcurrent cap when set; else fall back to the combo-level concurrency.
+    const targetConcurrency = await resolveTargetConcurrency(target.connectionId);
     let release: () => void;
     try {
       release = await semaphore.acquire(semaphoreKey, {
-        maxConcurrency: concurrency,
+        maxConcurrency: targetConcurrency,
         timeoutMs: queueTimeout,
         maxQueueSize: queueDepth,
       });

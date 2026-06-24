@@ -122,6 +122,13 @@ const OAUTH_TEST_CONFIG = {
     checkExpiry: true,
     refreshable: true,
   },
+  "codebuddy-cn": {
+    // Upstream test endpoint mirrors "tokenExists: true" from the CodeBuddy port —
+    // validate auth via token presence + refresh path. Live connectivity is
+    // verified through real /v2/chat/completions traffic.
+    checkExpiry: true,
+    refreshable: true,
+  },
 };
 
 import { CLI_RUNTIME_PROVIDER_MAP } from "./cliRuntimeProviderMap";
@@ -554,7 +561,8 @@ export async function testOAuthConnection(
     // 400 because the probe body is invalid. A 400 from such a provider means auth
     // succeeded; only 401/403 means the token is bad.
     const accepted =
-      res.ok || (Array.isArray(config.acceptStatuses) && config.acceptStatuses.includes(res.status));
+      res.ok ||
+      (Array.isArray(config.acceptStatuses) && config.acceptStatuses.includes(res.status));
     if (accepted) {
       return {
         valid: true,

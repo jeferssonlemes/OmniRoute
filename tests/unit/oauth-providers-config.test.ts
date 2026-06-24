@@ -28,6 +28,7 @@ const {
   CLAUDE_CONFIG,
   CLINE_CONFIG,
   CODEX_CONFIG,
+  CODEBUDDY_CN_CONFIG,
   CURSOR_CONFIG,
   GEMINI_CONFIG,
   GITHUB_CONFIG,
@@ -66,6 +67,7 @@ const EXPECTED_PROVIDER_KEYS = [
   "cline",
   "windsurf",
   "devin-cli",
+  "codebuddy-cn",
 ];
 
 const EXPECTED_CONFIG_BY_PROVIDER = {
@@ -87,6 +89,7 @@ const EXPECTED_CONFIG_BY_PROVIDER = {
   windsurf: WINDSURF_CONFIG,
   "devin-cli": WINDSURF_CONFIG,
   trae: TRAE_CONFIG,
+  "codebuddy-cn": CODEBUDDY_CN_CONFIG,
 };
 
 const REQUIRED_FIELDS_BY_PROVIDER = {
@@ -293,6 +296,18 @@ test("all provider endpoint URLs use HTTPS when a URL is configured", () => {
   }
 });
 
+test("Qwen OAuth uses qwen.ai (not chat.qwen.ai) for device/token URLs — upstream PR #683 / decolua issue #572", () => {
+  // The legacy host `chat.qwen.ai` started returning errors; the correct authoritative
+  // host for Qwen's device-code OAuth endpoints is `qwen.ai`. Regression guard for the
+  // port of decolua/9router#683 (closes decolua issue #572).
+  const deviceUrl = new URL(QWEN_CONFIG.deviceCodeUrl);
+  const tokenUrl = new URL(QWEN_CONFIG.tokenUrl);
+  assert.equal(deviceUrl.hostname, "qwen.ai", "deviceCodeUrl must use qwen.ai");
+  assert.equal(tokenUrl.hostname, "qwen.ai", "tokenUrl must use qwen.ai");
+  assert.equal(deviceUrl.pathname, "/api/v1/oauth2/device/code");
+  assert.equal(tokenUrl.pathname, "/api/v1/oauth2/token");
+});
+
 test("browser-based providers expose buildAuthUrl and return provider-specific auth URLs", () => {
   const redirectUri = "http://localhost:43121/callback";
   const state = "state-123";
@@ -387,29 +402,21 @@ test("custom Google OAuth callbacks preserve the requested callback path and que
 });
 
 test("custom Google OAuth credentials switch IPv6 loopback callbacks to public base URL", () => {
-  const redirectUri = resolveBrowserOAuthRedirectUri(
-    "gemini-cli",
-    "http://[::1]:20128/callback",
-    {
-      OMNIROUTE_PUBLIC_BASE_URL: "https://omniroute.example.com",
-      GEMINI_OAUTH_CLIENT_ID: "custom-gemini.apps.googleusercontent.com",
-      GEMINI_OAUTH_CLIENT_SECRET: "custom-gemini-secret",
-    }
-  );
+  const redirectUri = resolveBrowserOAuthRedirectUri("gemini-cli", "http://[::1]:20128/callback", {
+    OMNIROUTE_PUBLIC_BASE_URL: "https://omniroute.example.com",
+    GEMINI_OAUTH_CLIENT_ID: "custom-gemini.apps.googleusercontent.com",
+    GEMINI_OAUTH_CLIENT_SECRET: "custom-gemini-secret",
+  });
 
   assert.equal(redirectUri, "https://omniroute.example.com/callback");
 });
 
 test("custom Google OAuth callbacks default root loopback paths to callback path", () => {
-  const redirectUri = resolveBrowserOAuthRedirectUri(
-    "antigravity",
-    "http://127.0.0.1:20128",
-    {
-      NEXT_PUBLIC_BASE_URL: "https://omniroute.example.com",
-      ANTIGRAVITY_OAUTH_CLIENT_ID: "custom-antigravity.apps.googleusercontent.com",
-      ANTIGRAVITY_OAUTH_CLIENT_SECRET: "custom-antigravity-secret",
-    }
-  );
+  const redirectUri = resolveBrowserOAuthRedirectUri("antigravity", "http://127.0.0.1:20128", {
+    NEXT_PUBLIC_BASE_URL: "https://omniroute.example.com",
+    ANTIGRAVITY_OAUTH_CLIENT_ID: "custom-antigravity.apps.googleusercontent.com",
+    ANTIGRAVITY_OAUTH_CLIENT_SECRET: "custom-antigravity-secret",
+  });
 
   assert.equal(redirectUri, "https://omniroute.example.com/callback");
 });

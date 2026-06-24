@@ -9,10 +9,7 @@ import { getModelTargetFormat } from "../../config/providerModels.ts";
 // dispatching Claude-shape requests to these providers. Anthropic Claude and
 // other Claude-compatible upstreams that do accept it are unaffected.
 // Ported from upstream decolua/9router#820 by @hiepau1231.
-const CLAUDE_FORMAT_PROVIDERS_WITHOUT_OUTPUT_CONFIG = new Set<string>([
-  "minimax",
-  "minimax-cn",
-]);
+const CLAUDE_FORMAT_PROVIDERS_WITHOUT_OUTPUT_CONFIG = new Set<string>(["minimax", "minimax-cn"]);
 
 // Placeholder thinking text used as last-resort fallback when:
 //   - Target upstream is a non-Anthropic Claude-shape provider
@@ -300,6 +297,33 @@ export function prepareClaudeRequest(
           (block) => block.type !== "tool_result" || block.tool_use_id
         );
       }
+    }
+
+    // Tools: for non-Anthropic providers (MiniMax and other Anthropic-compatible
+    // Claude-shape endpoints) strip Anthropic-only built-in tools (e.g.
+    // web_search_20250305) and normalize OpenAI-wire-shape tools to the
+    // Anthropic-native shape — fold `function.{name,description,parameters}`
+    // into top-level `{name, description, input_schema}` and drop the stray
+    // `type` field. Without this MiniMax rejects with code 2013 ("invalid
+    // tool type"). Port of upstream decolua/9router@45240c19.
+    if (body.tools && Array.isArray(body.tools) && provider !== "claude") {
+      body.tools = body.tools
+        .filter((tool) => !tool.type || tool.type === "function")
+        .map((tool) => {
+          const t = tool as ClaudeTool & {
+            function?: { name?: string; description?: string; parameters?: unknown };
+            type?: string;
+          };
+          if (t.function) {
+            return {
+              name: t.function.name,
+              description: t.function.description,
+              input_schema: t.function.parameters,
+            } as ClaudeTool;
+          }
+          const { type: _type, ...rest } = t;
+          return rest as ClaudeTool;
+        });
     }
 
     // Also filter top-level tool declarations with empty names
