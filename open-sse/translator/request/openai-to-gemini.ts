@@ -32,9 +32,8 @@ import {
 import { buildGeminiTools, sanitizeGeminiToolName } from "../helpers/geminiToolsSanitizer.ts";
 
 // Observed Antigravity wrapper output cap, not an underlying model capability.
-// Keep this bridge-local: capMaxOutputTokens() falls back to OmniRoute's generic
-// 8192 default for unknown Claude-family IDs, while Antigravity currently caps
-// visible output around 16K. See: https://github.com/keisksw/antigravity-output-analysis
+// Keep this bridge-local: Antigravity currently caps visible output around 16K.
+// See: https://github.com/keisksw/antigravity-output-analysis
 const ANTIGRAVITY_CLAUDE_MAX_OUTPUT_TOKENS = 16_384;
 
 type GeminiPart = Record<string, unknown>;
@@ -274,25 +273,32 @@ function openaiToGeminiBase(
   if (body.stop !== undefined) {
     result.generationConfig.stopSequences = Array.isArray(body.stop) ? body.stop : [body.stop];
   }
-  const requestedMaxOutputTokens = (body.max_tokens ?? body.max_completion_tokens) as
-    | number
-    | undefined;
-  if (requestedMaxOutputTokens !== undefined) {
-    result.generationConfig.maxOutputTokens = capMaxOutputTokens(model, requestedMaxOutputTokens);
-  } else {
-    result.generationConfig.maxOutputTokens = capMaxOutputTokens(model);
+  const maxOutputTokens = capMaxOutputTokens(
+    model,
+    (body.max_tokens ?? body.max_completion_tokens) as number | undefined
+  );
+  if (maxOutputTokens !== null) {
+    result.generationConfig.maxOutputTokens = maxOutputTokens;
   }
 
   // Thinking / Reasoning support (Google Gemini 2.0+ Thinking models)
-  // 1. OpenAI format: reasoning_effort (low/medium/high)
+  // 1. OpenAI format: reasoning_effort (low/medium/high/auto/max/xhigh)
+  // "auto", "max", and "xhigh" are clamped to the high-tier budget because Gemini
+  // does not accept these strings directly. "auto" signals "use max reasonable effort"
+  // which maps to high. "max"/"xhigh" exceed Gemini's accepted range and are clamped.
+  // Port of decolua/9router#2043 by @nguyenxvotanminh3.
   if (body.reasoning_effort) {
+    const highBudget = capThinkingBudget(model, 32768);
     const budgetMap: Record<string, number> = {
       low: 1024,
       medium: getDefaultThinkingBudget(model) || 8192,
-      high: capThinkingBudget(model, 32768),
+      high: highBudget,
+      auto: highBudget,
+      max: highBudget,
+      xhigh: highBudget,
     };
     const budget =
-      budgetMap[body.reasoning_effort as string] || getDefaultThinkingBudget(model) || 8192;
+      budgetMap[body.reasoning_effort as string] ?? getDefaultThinkingBudget(model) ?? 8192;
     result.generationConfig.thinkingConfig = {
       thinkingBudget: budget,
       includeThoughts: true,

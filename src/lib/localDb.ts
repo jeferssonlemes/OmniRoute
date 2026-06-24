@@ -91,6 +91,7 @@ export {
 
 export * from "./db/compressionCacheStats";
 export * from "./db/compressionCombos";
+export * from "./db/compressionRunTelemetry";
 
 export {
   // API Keys
@@ -573,6 +574,8 @@ export {
   upsertAllocations,
   listAllocationsForApiKey,
 } from "./db/quotaPools";
+// Quota per-(key, model) caps — Group B Fase 3 #7
+export { getModelCap, listModelCaps, setModelCap, deleteModelCap } from "./db/quotaModelCaps";
 
 export {
   // Quota Groups (B2)

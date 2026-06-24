@@ -700,7 +700,7 @@ test("chat pipeline applies Codex CLI fingerprint to OAuth responses requests", 
   assert.equal(call.headers.Version, getCodexClientVersion());
   assert.equal(call.headers["Openai-Beta"], "responses=experimental");
   assert.equal(call.headers["X-Codex-Beta-Features"], "responses_websockets");
-  assert.equal(call.headers["User-Agent"], "codex-cli/0.132.0 (Windows 10.0.26200; x64)");
+  assert.equal(call.headers["User-Agent"], "codex-cli/0.142.0 (Windows 10.0.26200; x64)");
   assert.equal(call.headers["x-codex-window-id"], "conv_codex_fingerprint:0");
   assert.ok(call.headers["x-client-request-id"], "expected Codex request id header");
   assert.ok(call.headers["x-codex-turn-metadata"], "expected Codex turn metadata header");
@@ -711,15 +711,14 @@ test("chat pipeline applies Codex CLI fingerprint to OAuth responses requests", 
   assert.ok(headerOrder.indexOf("Accept") < headerOrder.indexOf("User-Agent"));
 
   const bodyOrder = Object.keys(JSON.parse(call.bodyString));
-  assert.deepEqual(bodyOrder.slice(0, 7), [
-    "model",
-    "stream",
-    "input",
-    "instructions",
-    "store",
-    "reasoning",
-    "prompt_cache_key",
-  ]);
+  // Order must match the canonical Codex fingerprint bodyFieldOrder (cliFingerprints.ts):
+  // …reasoning, prompt_cache_key, …, include — i.e. prompt_cache_key precedes include.
+  // (#4584 inadvertently flipped these two; fast-gates skip integration tests so it only
+  // surfaced on the release PR full CI.)
+  assert.deepEqual(
+    bodyOrder.slice(0, 8),
+    "model stream input instructions store reasoning prompt_cache_key include".split(" ")
+  );
   assert.equal(call.body.model, "gpt-5.5");
   assert.equal(call.body.store, false);
   assert.equal(
