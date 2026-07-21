@@ -1,0 +1,282 @@
+/**
+ * ClickHouse external logger — best-effort, non-blocking
+ *
+ * Attached to saveCallLog() so every request persisted in OmniRoute SQLite
+ * is also streamed to ClickHouse for analytics / audit.
+ *
+ * Environment:
+ *   CLICKHOUSE_URL      — default http://clickhouse.omniroute.svc.cluster.local:8123
+ *   CLICKHOUSE_USER     — default "default"
+ *   CLICKHOUSE_PASSWORD — default "" (from sealed secret)
+ *   CLICKHOUSE_LOG_FULL_BODY — "true" to log raw request/response payloads
+ *   CLICKHOUSE_BATCH_SIZE    — rows per flush (default 100)
+ *   CLICKHOUSE_FLUSH_MS      — max ms before flush (default 5000)
+ *
+ * Per-turn storage: clients re-send the whole thread each request, so the
+ * `messages` column stores only this turn's delta (messages after the last
+ * assistant), not the full array. Combined with `session_id` (resolved per
+ * client from headers or request body — see resolveChatLogSessionId in
+ * chatCore.ts), the full history is rebuilt by ordering a session's rows and
+ * concatenating `messages` + `response`. See extractTurnDelta() below.
+ */
+
+const CH_URL = (process.env.CLICKHOUSE_URL || "http://clickhouse.omniroute.svc.cluster.local:8123").replace(/\/$/, "");
+const CH_USER = process.env.CLICKHOUSE_USER || "default";
+const CH_PASS = process.env.CLICKHOUSE_PASSWORD || "";
+const DB = "default";
+const TABLE = "omniroute_requests";
+
+const LOG_FULL_BODY = process.env.CLICKHOUSE_LOG_FULL_BODY === "true";
+const BATCH_SIZE = Math.min(Math.max(Number(process.env.CLICKHOUSE_BATCH_SIZE || "100"), 10), 1000);
+const FLUSH_MS = Math.min(Math.max(Number(process.env.CLICKHOUSE_FLUSH_MS || "5000"), 1000), 30000);
+const MAX_BUFFER = BATCH_SIZE * 5; // hard ceiling to prevent unbounded growth
+
+interface ChRow {
+  request_id: string;
+  session_id: string;
+  timestamp: string;
+  api_key_id: string;
+  model: string;
+  provider: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+  status: number;
+  latency_ms: number;
+  messages: string;
+  response: string;
+  error: string;
+}
+
+// IMPORTANT: store state on globalThis so all Webpack-split copies of this
+// module share the same buffer/initialized flag. Next.js dynamic imports
+// can produce per-consumer chunk copies, and without a shared singleton
+// the minifier strips the emit path (it sees _initialized never becoming
+// true within its own chunk and treats the function body as unreachable).
+interface ChState {
+  buffer: ChRow[];
+  flushTimer: ReturnType<typeof setTimeout> | null;
+  initialized: boolean;
+  initError: string | null;
+  consecutiveFailures: number;
+}
+
+const STATE_KEY = "__omniClickHouseLoggerState";
+const _state: ChState = ((globalThis as any)[STATE_KEY] ??= {
+  buffer: [],
+  flushTimer: null,
+  initialized: false,
+  initError: null,
+  consecutiveFailures: 0,
+});
+
+function authHeaders(): Record<string, string> {
+  const h: Record<string, string> = {
+    "Content-Type": "text/plain; charset=UTF-8",
+  };
+  if (CH_PASS) {
+    h["Authorization"] = "Basic " + Buffer.from(`${CH_USER}:${CH_PASS}`).toString("base64");
+  }
+  return h;
+}
+
+async function chExec(query: string): Promise<void> {
+  const res = await fetch(`${CH_URL}/?database=${encodeURIComponent(DB)}`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: query,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "unknown");
+    throw new Error(`CH ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+async function ensureTable(): Promise<void> {
+  const ddl = `
+CREATE TABLE IF NOT EXISTS ${TABLE} (
+    request_id String,
+    session_id LowCardinality(String) DEFAULT '',
+    timestamp DateTime64(3) CODEC(Delta, LZ4),
+    api_key_id LowCardinality(String),
+    model LowCardinality(String),
+    provider LowCardinality(String),
+    input_tokens UInt32,
+    output_tokens UInt32,
+    cost Float64,
+    status UInt16,
+    latency_ms UInt32,
+    messages String CODEC(ZSTD(3)),
+    response String CODEC(ZSTD(3)),
+    error String CODEC(ZSTD(3))
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMMDD(timestamp)
+ORDER BY (api_key_id, timestamp)
+TTL toDateTime(timestamp) + INTERVAL 7 DAY
+SETTINGS index_granularity = 8192
+`.trim();
+  await chExec(ddl);
+  // Existing deployments: add session_id without recreating the table (idempotent).
+  await chExec(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS session_id LowCardinality(String) DEFAULT ''`);
+}
+
+async function flushBuffer(): Promise<void> {
+  if (_state.buffer.length === 0) return;
+  const batch = _state.buffer.splice(0, _state.buffer.length);
+
+  const body = batch.map((r) => JSON.stringify(r)).join("\n");
+  const query = `INSERT INTO ${TABLE} FORMAT JSONEachRow`;
+
+  try {
+    const res = await fetch(
+      `${CH_URL}/?database=${encodeURIComponent(DB)}&query=${encodeURIComponent(query)}`,
+      {
+        method: "POST",
+        headers: authHeaders(),
+        body,
+        signal: AbortSignal.timeout(15_000),
+      }
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "unknown");
+      throw new Error(`CH insert ${res.status}: ${text.slice(0, 200)}`);
+    }
+    _state.consecutiveFailures = 0;
+    if (process.env.APP_LOG_LEVEL === "debug") {
+      // eslint-disable-next-line no-console
+      console.log(`[ClickHouse] flushed ${batch.length} rows`);
+    }
+  } catch (err: any) {
+    _state.consecutiveFailures++;
+    // eslint-disable-next-line no-console
+    console.error(`[ClickHouse] flush failed (${_state.consecutiveFailures}x): ${err.message}`);
+    // Re-queue, but enforce max buffer. If we keep failing, drop oldest.
+    const total = _state.buffer.length + batch.length;
+    if (total > MAX_BUFFER) {
+      const drop = total - MAX_BUFFER;
+      // eslint-disable-next-line no-console
+      console.error(`[ClickHouse] buffer overflow — dropping ${drop} oldest rows`);
+      _state.buffer = [...batch, ..._state.buffer].slice(drop);
+    } else {
+      _state.buffer.unshift(...batch);
+    }
+  }
+}
+
+function scheduleFlush() {
+  if (_state.flushTimer) return;
+  _state.flushTimer = setTimeout(() => {
+    _state.flushTimer = null;
+    flushBuffer().catch(() => {});
+  }, FLUSH_MS);
+}
+
+function safeJson(value: unknown, fallback = "<serialize-failed>"): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Extract only the NEW messages for this turn instead of the whole thread.
+ *
+ * Clients re-send the entire conversation on every request, so logging the
+ * full `messages` array duplicates the thread on each turn (O(N²) storage).
+ * The only genuinely new content per turn is whatever follows the last
+ * `assistant` message (the fresh user prompt, occasionally a trailing system
+ * reminder). The assistant's reply for this turn is already captured in the
+ * `response` column. Reconstruct a full history by ordering a session's rows
+ * and concatenating `messages` + `response` per row.
+ *
+ * The first turn has no prior assistant message, so the full opening context
+ * (system + first user) is stored once — which is correct.
+ */
+function extractTurnDelta(requestBody: unknown): string {
+  const body = requestBody as { messages?: unknown } | null | undefined;
+  const msgs = body?.messages;
+  if (!Array.isArray(msgs) || msgs.length === 0) return safeJson(requestBody);
+
+  // Drop the synthetic truncation marker the chat logger prepends to long arrays.
+  const first = msgs[0] as Record<string, unknown> | null;
+  const items =
+    first && typeof first === "object" && first._omniroute_truncated_array ? msgs.slice(1) : msgs;
+  if (items.length === 0) return "[]";
+
+  let lastAssistantIdx = -1;
+  for (let i = items.length - 1; i >= 0; i--) {
+    const role = (items[i] as { role?: unknown } | null)?.role;
+    if (role === "assistant") {
+      lastAssistantIdx = i;
+      break;
+    }
+  }
+
+  const delta = lastAssistantIdx >= 0 ? items.slice(lastAssistantIdx + 1) : items;
+  return safeJson(delta);
+}
+
+/** Call once at server startup. Idempotent. */
+export async function initClickHouseLogger(): Promise<void> {
+  if (_state.initialized || _state.initError) return;
+  try {
+    await ensureTable();
+    _state.initialized = true;
+    // eslint-disable-next-line no-console
+    console.log(`[ClickHouse] logger ready — ${TABLE} (ttl=7d, batch=${BATCH_SIZE}, maxBuf=${MAX_BUFFER})`);
+  } catch (err: any) {
+    _state.initError = err.message;
+    // eslint-disable-next-line no-console
+    console.error(`[ClickHouse] init failed: ${err.message}`);
+  }
+}
+
+/** Emits a call-log row to ClickHouse (best-effort, never throws). */
+export function emitClickHouseLog(entry: Record<string, any>): void {
+  if (!_state.initialized) return;
+
+  const tokens = entry.tokens || {};
+  const duration = typeof entry.duration === "number" ? entry.duration : 0;
+  const status = typeof entry.status === "number" ? entry.status : 0;
+
+  // Honor the same no-log gate as the SQLite path (callLogs.ts): when the API
+  // key opts out of payload logging, never mirror request/response bodies to
+  // ClickHouse. Scalar metrics (tokens, cost, status) are still recorded.
+  const noLog = Boolean(entry.noLog);
+  const logBodies = LOG_FULL_BODY && !noLog;
+  const messages = logBodies ? extractTurnDelta(entry.requestBody) : "";
+  const response = logBodies ? safeJson(entry.responseBody) : "";
+  const error = entry.error ? safeJson(entry.error) : "";
+
+  // ClickHouse JSONEachRow DateTime64 does not accept ISO 8601 (`T`/`Z`).
+  // Convert to the supported `YYYY-MM-DD HH:MM:SS.sss` form.
+  const rawTs = typeof entry.timestamp === "string" ? entry.timestamp : new Date().toISOString();
+  const chTimestamp = rawTs.replace("T", " ").replace("Z", "").replace(/\.(\d{3})\d*$/, ".$1");
+
+  const row: ChRow = {
+    request_id: String(entry.id || entry.requestId || "unknown"),
+    session_id: String(entry.sessionId || ""),
+    timestamp: chTimestamp,
+    api_key_id: String(entry.apiKeyId || "unknown"),
+    model: String(entry.model || entry.requestedModel || "unknown"),
+    provider: String(entry.provider || "unknown"),
+    input_tokens: Number(tokens.prompt_tokens ?? tokens.input_tokens ?? 0),
+    output_tokens: Number(tokens.completion_tokens ?? tokens.output_tokens ?? 0),
+    cost: Number(entry.cost ?? 0),
+    status,
+    latency_ms: duration,
+    messages,
+    response,
+    error,
+  };
+
+  _state.buffer.push(row);
+  if (_state.buffer.length >= BATCH_SIZE) {
+    flushBuffer().catch(() => {});
+  } else {
+    scheduleFlush();
+  }
+}

@@ -113,6 +113,16 @@ async function startServer() {
     }
 
     await initializeCloudSync();
+
+    // ClickHouse external logger (best-effort, never fatal).
+    try {
+      const { initClickHouseLogger } = await import("./lib/plugins/clickhouseLogger");
+      await initClickHouseLogger();
+      startupLog.info("ClickHouse logger initialized");
+    } catch (err: any) {
+      startupLog.warn({ err: err?.message }, "ClickHouse logger could not initialize");
+    }
+
     startBudgetResetJob();
     startReasoningCacheCleanupJob();
     startCleanupScheduler();

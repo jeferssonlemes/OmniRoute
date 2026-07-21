@@ -1201,3 +1201,18 @@ Not required for normal operation — developer tooling only.
 | Variable                     | Default      | Source File                         | Description                                                                                                                                              |
 | ---------------------------- | ------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OMNIROUTE_EVAL_CREDENTIALS` | `{}` (empty) | `scripts/compression-eval/index.ts` | Operator-supplied JSON credentials for the provider exercised by the offline compression-eval CLI (parsed with `JSON.parse`). Leave unset for a dry run. |
+
+### ClickHouse external logger
+
+Best-effort request mirroring to ClickHouse (`src/lib/plugins/clickhouseLogger.ts`).
+All optional — the logger stays inert when `CLICKHOUSE_URL` is unreachable. Not
+required for normal operation.
+
+| Variable                   | Default                                              | Source File                           | Description                                             |
+| -------------------------- | ---------------------------------------------------- | ------------------------------------- | ------------------------------------------------------- |
+| `CLICKHOUSE_URL`           | `http://clickhouse.omniroute.svc.cluster.local:8123` | `src/lib/plugins/clickhouseLogger.ts` | ClickHouse HTTP endpoint. Trailing slash is stripped.   |
+| `CLICKHOUSE_USER`          | `default`                                            | `src/lib/plugins/clickhouseLogger.ts` | ClickHouse user.                                        |
+| `CLICKHOUSE_PASSWORD`      | _(empty)_                                            | `src/lib/plugins/clickhouseLogger.ts` | ClickHouse password (never logged).                     |
+| `CLICKHOUSE_LOG_FULL_BODY` | `false`                                              | `src/lib/plugins/clickhouseLogger.ts` | Log full request/response bodies when set to `true`.    |
+| `CLICKHOUSE_BATCH_SIZE`    | `100`                                                | `src/lib/plugins/clickhouseLogger.ts` | Rows buffered before a flush (clamped 10..1000).        |
+| `CLICKHOUSE_FLUSH_MS`      | `5000`                                               | `src/lib/plugins/clickhouseLogger.ts` | Max milliseconds between flushes (clamped 1000..30000). |

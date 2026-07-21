@@ -52,6 +52,7 @@ export type PersistAttemptLogsContext = {
   noLogEnabled: unknown;
   correlationId?: string | null;
   modelPinned?: boolean;
+  sessionId?: string | null;
 };
 
 function toConnectionId(value: unknown): string | null {
@@ -110,6 +111,7 @@ export function persistAttemptLogs(args: PersistAttemptLogsArgs, ctx: PersistAtt
     noLogEnabled,
     correlationId,
     modelPinned,
+    sessionId,
   } = ctx;
   const initialConnectionId = toConnectionId(connectionId);
   const finalConnectionId = toConnectionId(credentials?.connectionId) || initialConnectionId;
@@ -206,5 +208,6 @@ export function persistAttemptLogs(args: PersistAttemptLogsArgs, ctx: PersistAtt
     pipelinePayloads,
     correlationId,
     modelPinned: modelPinned || false,
+    sessionId: sessionId || null,
   }).catch(() => {});
 }

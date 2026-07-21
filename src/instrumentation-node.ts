@@ -333,6 +333,17 @@ export async function registerNodejs(): Promise<void> {
 
   await ensureDbReadyForBoot();
 
+  // ClickHouse external logger (best-effort, never fatal).
+  // Activates only when CLICKHOUSE_URL is set. Failures here must not crash boot.
+  try {
+    const { initClickHouseLogger } = await import("@/lib/plugins/clickhouseLogger");
+    await initClickHouseLogger();
+    console.log("[STARTUP] ClickHouse logger init attempted");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[STARTUP] ClickHouse logger could not initialize:", msg);
+  }
+
   // Storage-configured scheduled VACUUM (#4437): registers the timer from
   // Settings > System & Storage and persists lastVacuumAt for the UI.
   try {

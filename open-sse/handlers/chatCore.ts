@@ -24,6 +24,7 @@ import {
   isNoMemoryRequested,
   resolveCompressionHeader,
   isStripReasoningRequested,
+  resolveChatLogSessionId,
 } from "./chatCore/headers.ts";
 import { markCodexScopeRateLimited } from "./chatCore/codexFailover.ts";
 import { isCodexOriginatedHeaders } from "../config/codexIdentity.ts";
@@ -804,6 +805,12 @@ export async function handleChatCore({
           clientRawRequest?.headers ?? null,
           "x-omniroute-session-id"
         )) || skillRequestId;
+  // Conversation/session id for the ClickHouse call-log mirror — resolved per client
+  // shape (headers or request body). Independent of pipelineSessionId (internal routing).
+  const chatLogSessionId = resolveChatLogSessionId(
+    clientRawRequest?.headers ?? null,
+    (body as Record<string, unknown>) ?? null
+  );
   // persistAttemptLogs extracted to chatCore/attemptLogging.ts (#3501); bind the per-request context
   // once so the 16 call sites keep passing only the per-attempt args (byte-identical).
   const persistAttemptLogs = (args: PersistAttemptLogsArgs) =>
@@ -830,6 +837,7 @@ export async function handleChatCore({
       noLogEnabled,
       correlationId,
       modelPinned,
+      sessionId: chatLogSessionId,
     });
 
   // Primary path: merge client model id + alias target so config on either key applies; resolved
