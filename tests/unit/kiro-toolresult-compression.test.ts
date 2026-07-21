@@ -103,8 +103,8 @@ describe("Kiro tool-result compression (port of decolua/9router#1194)", () => {
         userInputMessageContext: { toolResults: Array<{ content: Array<{ text: string }> }> };
       };
     };
-    const afterLen =
-      restored.userInputMessage.userInputMessageContext.toolResults[0].content[0].text.length;
+    const afterLen = restored.userInputMessage.userInputMessageContext.toolResults[0].content[0]
+      .text.length;
     assert.ok(
       afterLen < originalLen,
       `Kiro tool-result text must shrink (before=${originalLen}, after=${afterLen})`
@@ -174,9 +174,8 @@ describe("Kiro tool-result compression (port of decolua/9router#1194)", () => {
         };
       }>;
     };
-    const afterLen =
-      state.history[0].userInputMessage.userInputMessageContext.toolResults[0].content[0].text
-        .length;
+    const afterLen = state.history[0].userInputMessage.userInputMessageContext.toolResults[0]
+      .content[0].text.length;
     assert.ok(
       afterLen < originalLen,
       `history tool-result text must shrink (before=${originalLen}, after=${afterLen})`

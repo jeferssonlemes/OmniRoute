@@ -4,7 +4,10 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
 import type { AuditLogEntry } from "@/lib/compliance/index";
 import ActivityFeed from "./components/ActivityFeed";
-import EventTypeFilter, { type EventCategory, matchesCategory } from "./components/EventTypeFilter";
+import EventTypeFilter, {
+  type EventCategory,
+  matchesCategory,
+} from "./components/EventTypeFilter";
 
 const FEED_LIMIT = 200;
 

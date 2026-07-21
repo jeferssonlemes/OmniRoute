@@ -6,8 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { applyClientUsageBuffer } =
-  await import("../../open-sse/handlers/chatCore/clientUsageBuffer.ts");
+const { applyClientUsageBuffer } = await import(
+  "../../open-sse/handlers/chatCore/clientUsageBuffer.ts"
+);
 
 function makeDeps(overrides: Record<string, unknown> = {}) {
   const calls = { buffer: [] as unknown[], estimate: [] as unknown[], filter: [] as unknown[] };

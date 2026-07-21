@@ -51,13 +51,7 @@ test("extractSystemMessagesToBody is a no-op without system messages or a messag
 test("normalizeClaudeUpstreamMessages drops empty text blocks", () => {
   const payload: Record<string, unknown> = {
     messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "" },
-          { type: "text", text: "keep" },
-        ],
-      },
+      { role: "user", content: [{ type: "text", text: "" }, { type: "text", text: "keep" }] },
     ],
   };
   normalizeClaudeUpstreamMessages(payload);

@@ -1,18 +1,18 @@
 ---
 title: "CLI Tools — OmniRoute"
-version: 3.8.31
-lastUpdated: 2026-06-20
+version: 3.8.40
+lastUpdated: 2026-06-28
 ---
 
 # CLI Tools — OmniRoute
 
-Last updated: 2026-06-20
+Last updated: 2026-06-28
 
 OmniRoute integrates with three categories of CLI tools spread across three dedicated dashboard pages:
 
 | Page           | Route                   | Concept                                                                   | Count        |
 | -------------- | ----------------------- | ------------------------------------------------------------------------- | ------------ |
-| **CLI Code's** | `/dashboard/cli-code`   | Coding tools you point at OmniRoute (Client → CLI → OmniRoute → Provider) | 19           |
+| **CLI Code's** | `/dashboard/cli-code`   | Coding tools you point at OmniRoute (Client → CLI → OmniRoute → Provider) | 20           |
 | **CLI Agents** | `/dashboard/cli-agents` | Autonomous agents you point at OmniRoute (same flow, broader scope)       | 6            |
 | **ACP Agents** | `/dashboard/acp-agents` | CLIs that OmniRoute spawns as backend via stdio/ACP (reverse flow)        | see registry |
 
@@ -56,7 +56,6 @@ omniroute setup-codex        omniroute setup-claude       omniroute setup-openco
 omniroute setup-cline        omniroute setup-kilo         omniroute setup-continue
 omniroute setup-cursor       omniroute setup-roo          omniroute setup-crush
 omniroute setup-goose        omniroute setup-qwen         omniroute setup-aider
-omniroute setup-gemini
 ```
 
 Each accepts `--remote <url> --api-key <key>` (configure a local tool against a
@@ -91,31 +90,31 @@ Entries with `baseUrlSupport: "none"` are **not shown** in the dashboard pages �
 
 ---
 
-## 1. CLI Code's Catalog (19 tools)
+## 1. CLI Code's Catalog (20 tools)
 
 Tools that support custom base URL and appear in `/dashboard/cli-code`:
 
-| id           | name                 | vendor              | baseUrlSupport | configType     | acpSpawnable |
-| ------------ | -------------------- | ------------------- | -------------- | -------------- | ------------ |
-| claude       | Claude Code          | Anthropic           | full           | env            | true         |
-| codex        | OpenAI Codex CLI     | OpenAI              | full           | custom         | true         |
-| cline        | Cline                | OSS (ex-Claude Dev) | full           | custom         | true         |
-| kilo         | Kilo Code            | Kilo-Org            | full           | custom         | false        |
-| roo          | Roo Code             | Roo (OSS)           | full           | guide          | false        |
-| continue     | Continue             | continue.dev        | full           | guide          | false        |
-| qwen         | Qwen Code            | Alibaba             | full           | guide          | true         |
-| aider        | Aider                | OSS (P. Gauthier)   | full           | guide          | true         |
-| forge        | ForgeCode            | Antinomy HQ         | full           | custom         | true         |
-| jcode        | jcode                | 1jehuang (OSS)      | full           | custom         | false        |
-| deepseek-tui | DeepSeek TUI         | Hunter Bown (OSS)   | full           | custom         | false        |
-| opencode     | OpenCode             | Anomaly (ex-SST)    | full           | guide          | true         |
-| droid        | Factory Droid        | Factory AI          | partial        | guide          | false        |
-| copilot      | GitHub Copilot CLI   | GitHub/MS           | full           | custom         | false        |
-| gemini-cli   | Gemini CLI           | Google              | partial        | guide          | true         |
-| cursor-cli   | Cursor CLI           | Anysphere           | partial        | guide          | true         |
-| smelt        | Smelt                | leonardcser (OSS)   | full           | custom         | false        |
-| pi           | Pi (pi-coding-agent) | M. Zechner (OSS)    | full           | custom         | false        |
-| custom       | Custom CLI           | —                   | full           | custom-builder | false        |
+| id | name | vendor | baseUrlSupport | configType | acpSpawnable |
+|----|------|--------|---------------|-----------|-------------|
+| claude | Claude Code | Anthropic | full | env | true |
+| codex | OpenAI Codex CLI | OpenAI | full | custom | true |
+| cline | Cline | OSS (ex-Claude Dev) | full | custom | true |
+| kilo | Kilo Code | Kilo-Org | full | custom | false |
+| roo | Roo Code | Roo (OSS) | full | guide | false |
+| continue | Continue | continue.dev | full | guide | false |
+| qwen | Qwen Code | Alibaba | full | guide | true |
+| aider | Aider | OSS (P. Gauthier) | full | guide | true |
+| forge | ForgeCode | Antinomy HQ | full | custom | true |
+| jcode | jcode | 1jehuang (OSS) | full | custom | false |
+| deepseek-tui | DeepSeek TUI | Hunter Bown (OSS) | full | custom | false |
+| codewhale | CodeWhale | Hmbown (OSS) | full | custom | false |
+| opencode | OpenCode | Anomaly (ex-SST) | full | guide | true |
+| droid | Factory Droid | Factory AI | partial | guide | false |
+| copilot | GitHub Copilot CLI | GitHub/MS | full | custom | false |
+| cursor-cli | Cursor CLI | Anysphere | partial | guide | true |
+| smelt | Smelt | leonardcser (OSS) | full | custom | false |
+| pi | Pi (pi-coding-agent) | M. Zechner (OSS) | full | custom | false |
+| custom | Custom CLI | — | full | custom-builder | false |
 
 Tools with `baseUrlSupport: "partial"` show a badge "⚠ Base URL parcial" in the dashboard card.
 
@@ -140,7 +139,6 @@ Autonomous agents that appear in `/dashboard/cli-agents`:
 
 This page (renamed from `/dashboard/agents`) shows CLIs that OmniRoute can **spawn** as backend execution engines via stdio/ACP protocol. The catalog is maintained separately in `src/lib/acp/registry.ts` and is **not** the same as `CLI_TOOLS`.
 
-Current ACP-spawnable CLIs (from `acpSpawnable: true` in `CLI_TOOLS` + ACP registry): codex, claude, goose, gemini-cli, openclaw, aider, opencode, cline, qwen-code, forge, interpreter, cursor-cli, warp.
 
 ---
 
@@ -201,7 +199,8 @@ New tools with `configType: "custom"` have dedicated settings API routes:
 | ------------------------------------------- | ------------------------------ |
 | `POST /api/cli-tools/forge-settings`        | ForgeCode (.forge.toml)        |
 | `POST /api/cli-tools/jcode-settings`        | jcode (--base-url flag)        |
-| `POST /api/cli-tools/deepseek-tui-settings` | DeepSeek TUI (OPENAI_BASE_URL) |
+| `POST /api/cli-tools/deepseek-tui-settings` | DeepSeek TUI (OPENAI_BASE_URL, legacy) |
+| `POST /api/cli-tools/codewhale-settings`    | CodeWhale (OPENAI_BASE_URL, primary + legacy `~/.deepseek` sync) |
 | `POST /api/cli-tools/smelt-settings`        | Smelt                          |
 | `POST /api/cli-tools/pi-settings`           | Pi coding agent                |
 
@@ -276,7 +275,7 @@ Full PT-BR and EN translations are provided. 39 other locales fall back to EN au
 
 ### Step 2 — Install CLI Tools
 
-All npm-based tools require Node.js 20.20.2+, 22.22.2+ or 24.x:
+All npm-based tools require Node.js 22.22.2+ or 24.x:
 
 ```bash
 # Claude Code (Anthropic)
@@ -604,10 +603,10 @@ omniroute setup --add-provider \
 
 Recognized environment variables for non-interactive setup:
 
-| Var                | Purpose                                                            |
-| ------------------ | ----------------------------------------------------------------- |
-| `OMNIROUTE_API_KEY` | Provider API key (bound to `--api-key` via Commander `.env()`)   |
-| `DATA_DIR`         | Override the OmniRoute data directory                             |
+| Var                 | Purpose                                                        |
+| ------------------- | -------------------------------------------------------------- |
+| `OMNIROUTE_API_KEY` | Provider API key (bound to `--api-key` via Commander `.env()`) |
+| `DATA_DIR`          | Override the OmniRoute data directory                          |
 
 All other non-interactive inputs are passed as flags, not environment variables:
 `--password`, `--provider`, `--provider-name`, `--provider-base-url`, `--default-model`
@@ -649,7 +648,7 @@ omniroute providers validate                        # Local-only structural vali
 ### Recovery & Reset
 
 ```bash
-omniroute reset-password                # Reset the admin password (legacy alias still works)
+omniroute reset-password                # Reset the admin password (also: omniroute-reset-password)
 omniroute reset-encrypted-columns       # Show warning + dry-run for encrypted credential reset
 omniroute reset-encrypted-columns --force  # Actually null out encrypted credentials in SQLite
 ```

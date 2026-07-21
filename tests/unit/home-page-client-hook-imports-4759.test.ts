@@ -17,7 +17,9 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const src = readFileSync(
-  fileURLToPath(new URL("../../src/app/(dashboard)/dashboard/HomePageClient.tsx", import.meta.url)),
+  fileURLToPath(
+    new URL("../../src/app/(dashboard)/dashboard/HomePageClient.tsx", import.meta.url)
+  ),
   "utf8"
 );
 
@@ -28,13 +30,7 @@ function collect(re: RegExp, group = 1): Set<string> {
 const called = collect(/\b(use[A-Z]\w*)\s*\(/g);
 const importedNames = new Set(
   [...src.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}/g)].flatMap((m) =>
-    m[1].split(",").map((s) =>
-      s
-        .trim()
-        .split(/\s+as\s+/)
-        .pop()!
-        .trim()
-    )
+    m[1].split(",").map((s) => s.trim().split(/\s+as\s+/).pop()!.trim())
   )
 );
 const declared = collect(/(?:function|const|let|var)\s+(use[A-Z]\w*)/g);

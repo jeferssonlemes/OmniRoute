@@ -5,7 +5,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { resolveMaxUploadSizeBytes } = await import("../../src/app/api/db-backups/import/route.ts");
+const { resolveMaxUploadSizeBytes } = await import(
+  "../../src/app/api/db-backups/import/route.ts"
+);
 
 const MB = 1024 * 1024;
 

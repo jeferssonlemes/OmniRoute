@@ -41,9 +41,7 @@ export function HttpProxySnippetCard({ port, onClose }: HttpProxySnippetCardProp
             className="text-text-muted hover:text-text-main focus-ring rounded"
             aria-label="Close"
           >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              close
-            </span>
+            <span className="material-symbols-outlined" aria-hidden="true">close</span>
           </button>
         </div>
 

@@ -6,7 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { recordStreamingCost } = await import("../../open-sse/handlers/chatCore/streamingCost.ts");
+const { recordStreamingCost } = await import(
+  "../../open-sse/handlers/chatCore/streamingCost.ts"
+);
 
 function spies(costValue: number) {
   const recorded: Array<{ apiKeyId: string; cost: number }> = [];

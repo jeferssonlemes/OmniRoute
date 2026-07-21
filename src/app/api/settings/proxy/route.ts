@@ -68,7 +68,9 @@ function getRegistryScopeForLevel(
     return undefined;
   }
 
-  return PROXY_LEVEL_TO_REGISTRY_SCOPE[level as keyof typeof PROXY_LEVEL_TO_REGISTRY_SCOPE];
+  return PROXY_LEVEL_TO_REGISTRY_SCOPE[
+    level as keyof typeof PROXY_LEVEL_TO_REGISTRY_SCOPE
+  ];
 }
 
 async function getRegistryProxyForLevel(level: string, id: string | null) {

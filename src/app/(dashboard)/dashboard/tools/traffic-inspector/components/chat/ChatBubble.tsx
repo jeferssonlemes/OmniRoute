@@ -30,13 +30,7 @@ export function ChatBubble({ turn }: ChatBubbleProps) {
   const isUser = turn.role === "user";
 
   return (
-    <div
-      className={cn(
-        "max-w-[85%] rounded-lg px-3 py-2",
-        isUser ? "ml-auto" : "mr-auto",
-        ROLE_STYLES[turn.role]
-      )}
-    >
+    <div className={cn("max-w-[85%] rounded-lg px-3 py-2", isUser ? "ml-auto" : "mr-auto", ROLE_STYLES[turn.role])}>
       <div className="flex items-center justify-between gap-2 mb-1">
         <span className="text-xs font-medium opacity-70">{ROLE_LABEL[turn.role]}</span>
         {isSystem && (

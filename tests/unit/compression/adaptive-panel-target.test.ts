@@ -4,14 +4,7 @@ import { formatAdaptiveTarget } from "../../../src/app/(dashboard)/dashboard/con
 
 test("formatAdaptiveTarget shows policy + computed target for reserve-output", () => {
   const label = formatAdaptiveTarget(
-    {
-      mode: "floor",
-      policy: "reserve-output",
-      outputReserve: 4096,
-      safetyMargin: 1024,
-      pct: 0.85,
-      absoluteBudget: 0,
-    },
+    { mode: "floor", policy: "reserve-output", outputReserve: 4096, safetyMargin: 1024, pct: 0.85, absoluteBudget: 0 },
     200000
   );
   assert.match(label, /reserve-output/);
@@ -21,14 +14,7 @@ test("formatAdaptiveTarget shows policy + computed target for reserve-output", (
 
 test("formatAdaptiveTarget shows off when disabled", () => {
   const label = formatAdaptiveTarget(
-    {
-      mode: "off",
-      policy: "reserve-output",
-      outputReserve: 4096,
-      safetyMargin: 1024,
-      pct: 0.85,
-      absoluteBudget: 0,
-    },
+    { mode: "off", policy: "reserve-output", outputReserve: 4096, safetyMargin: 1024, pct: 0.85, absoluteBudget: 0 },
     200000
   );
   assert.match(label, /off|disabled/i);
@@ -36,14 +22,7 @@ test("formatAdaptiveTarget shows off when disabled", () => {
 
 test("formatAdaptiveTarget reflects percentage policy target", () => {
   const label = formatAdaptiveTarget(
-    {
-      mode: "floor",
-      policy: "percentage",
-      outputReserve: 4096,
-      safetyMargin: 1024,
-      pct: 0.7,
-      absoluteBudget: 0,
-    },
+    { mode: "floor", policy: "percentage", outputReserve: 4096, safetyMargin: 1024, pct: 0.7, absoluteBudget: 0 },
     200000
   );
   assert.match(label, /percentage/);

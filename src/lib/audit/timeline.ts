@@ -98,7 +98,11 @@ export function groupByDay(entries: AuditLogEntry[], referenceNowMs?: number): D
  * @param locale - "en" or "pt-BR"
  * @param referenceNowMs - Override for "now" (ms since epoch). Defaults to Date.now().
  */
-export function relativeTime(iso: string, locale: "en" | "pt-BR", referenceNowMs?: number): string {
+export function relativeTime(
+  iso: string,
+  locale: "en" | "pt-BR",
+  referenceNowMs?: number
+): string {
   const nowMs = referenceNowMs ?? Date.now();
   const then = new Date(iso).getTime();
   if (!Number.isFinite(then)) {

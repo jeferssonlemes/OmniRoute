@@ -5,7 +5,10 @@
 // redirect the proxy to arbitrary hosts (file://, 127.0.0.1, EC2 metadata, etc).
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { AWS_REGION_PATTERN, assertValidAwsRegion } from "../../src/lib/oauth/constants/oauth";
+import {
+  AWS_REGION_PATTERN,
+  assertValidAwsRegion,
+} from "../../src/lib/oauth/constants/oauth";
 import { KiroService } from "../../src/lib/oauth/services/kiro";
 
 describe("AWS_REGION_PATTERN", () => {
@@ -82,7 +85,9 @@ describe("KiroService SSRF guard", () => {
   });
 
   it("pollDeviceToken rejects malicious region", async () => {
-    await assert.rejects(() => svc.pollDeviceToken("cid", "csec", "dc", "127.0.0.1"));
+    await assert.rejects(() =>
+      svc.pollDeviceToken("cid", "csec", "dc", "127.0.0.1")
+    );
   });
 
   it("validateImportToken rejects malicious region before fetching", async () => {

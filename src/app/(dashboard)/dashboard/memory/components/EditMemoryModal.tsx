@@ -151,7 +151,9 @@ export default function EditMemoryModal({ memory, isOpen, onClose, onSaved }: Pr
               metadataError ? "border-red-500" : "border-border"
             }`}
           />
-          {metadataError && <p className="text-xs text-red-400 mt-1">{metadataError}</p>}
+          {metadataError && (
+            <p className="text-xs text-red-400 mt-1">{metadataError}</p>
+          )}
         </div>
       </div>
     </Modal>

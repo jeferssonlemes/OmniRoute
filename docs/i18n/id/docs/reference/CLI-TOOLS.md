@@ -344,28 +344,28 @@ Keduanya berjalan sebagai rute internal dan menggunakan perutean model OmniRoute
 
 ## Endpoint API yang Tersedia
 
-| Endpoint                   | Deskripsi                     | Digunakan Untuk                      |
-| -------------------------- | ----------------------------- | ------------------------------------ |
-| `/v1/chat/completions`     | Chat standar (semua penyedia) | Semua alat modern                    |
-| `/v1/responses`            | Responses API (format OpenAI) | Codex, alur kerja agentik            |
-| `/v1/completions`          | Penyelesaian teks lama        | Alat lama yang menggunakan `prompt:` |
-| `/v1/embeddings`           | Embedding teks                | RAG, pencarian                       |
-| `/v1/images/generations`   | Pembuatan gambar              | GPT-Image, Flux, dll.                |
-| `/v1/audio/speech`         | Teks ke ucapan                | ElevenLabs, OpenAI TTS               |
-| `/v1/audio/transcriptions` | Ucapan ke teks                | Deepgram, AssemblyAI                 |
+| Endpoint                   | Deskripsi                         | Digunakan Untuk             |
+| -------------------------- | --------------------------------- | --------------------------- |
+| `/v1/chat/completions`     | Chat standar (semua penyedia)     | Semua alat modern           |
+| `/v1/responses`            | Responses API (format OpenAI)     | Codex, alur kerja agentik   |
+| `/v1/completions`          | Penyelesaian teks lama            | Alat lama yang menggunakan `prompt:` |
+| `/v1/embeddings`           | Embedding teks                    | RAG, pencarian              |
+| `/v1/images/generations`   | Pembuatan gambar                  | GPT-Image, Flux, dll.       |
+| `/v1/audio/speech`         | Teks ke ucapan                    | ElevenLabs, OpenAI TTS      |
+| `/v1/audio/transcriptions` | Ucapan ke teks                    | Deepgram, AssemblyAI        |
 
 ---
 
 ## Pemecahan Masalah
 
-| Error                           | Penyebab                       | Solusi                                             |
-| ------------------------------- | ------------------------------ | -------------------------------------------------- |
-| `Connection refused`            | OmniRoute tidak berjalan       | `pm2 start omniroute`                              |
-| `401 Unauthorized`              | API key salah                  | Periksa di `/dashboard/api-manager`                |
-| `No combo configured`           | Tidak ada combo perutean aktif | Atur di `/dashboard/combos`                        |
-| `invalid model`                 | Model tidak ada dalam katalog  | Gunakan `auto` atau periksa `/dashboard/providers` |
-| CLI menampilkan "not installed" | Biner tidak ada di PATH        | Periksa `which <command>`                          |
-| `kiro-cli: not found`           | Tidak ada di PATH              | `export PATH="$HOME/.local/bin:$PATH"`             |
+| Error                     | Penyebab                          | Solusi                                     |
+| ------------------------- | --------------------------------- | ------------------------------------------ |
+| `Connection refused`      | OmniRoute tidak berjalan          | `pm2 start omniroute`                      |
+| `401 Unauthorized`        | API key salah                     | Periksa di `/dashboard/api-manager`        |
+| `No combo configured`     | Tidak ada combo perutean aktif    | Atur di `/dashboard/combos`                |
+| `invalid model`           | Model tidak ada dalam katalog     | Gunakan `auto` atau periksa `/dashboard/providers` |
+| CLI menampilkan "not installed" | Biner tidak ada di PATH    | Periksa `which <command>`                  |
+| `kiro-cli: not found`     | Tidak ada di PATH                 | `export PATH="$HOME/.local/bin:$PATH"`     |
 
 ---
 

@@ -31,7 +31,9 @@ export async function POST(
 
   try {
     // Dynamic import — InAppLoginService depends on Playwright (heavy)
-    const { inAppLoginService } = await import("@omniroute/open-sse/services/inAppLoginService.ts");
+    const { inAppLoginService } = await import(
+      "@omniroute/open-sse/services/inAppLoginService.ts"
+    );
 
     const result = await inAppLoginService.startLogin(id, { timeout });
 

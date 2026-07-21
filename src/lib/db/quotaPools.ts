@@ -211,12 +211,7 @@ function getAllocations(poolId: string): PoolAllocation[] {
 }
 
 function makeId(): string {
-  // Use Web Crypto UUID (available in Node ≥19 globally; also available in browsers)
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  // Fallback: timestamp + random (extremely unlikely to collide in tests)
-  return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  return crypto.randomUUID();
 }
 
 // ---------------------------------------------------------------------------

@@ -13,11 +13,7 @@
  */
 
 import { EventEmitter } from "events";
-import {
-  TOKEN_EXTRACTION_CONFIGS,
-  TokenExtractionConfig,
-  type TokenSource,
-} from "./tokenExtractionConfig";
+import { TOKEN_EXTRACTION_CONFIGS, TokenExtractionConfig, type TokenSource } from "./tokenExtractionConfig";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,29 +46,19 @@ export class InAppLoginService extends EventEmitter {
     }
 
     if (this.activeLogin) {
-      this.emit("status", {
-        providerId,
-        status: "error",
-        message: "A login is already in progress",
-      });
+      this.emit("status", { providerId, status: "error", message: "A login is already in progress" });
       return { success: false, error: "A login process is already in progress" };
     }
 
     this.activeLogin = { providerId, aborted: false };
-    this.emit("status", {
-      providerId,
-      status: "starting",
-      message: `Opening ${config.displayName} login...`,
-    });
+    this.emit("status", { providerId, status: "starting", message: `Opening ${config.displayName} login...` });
 
     try {
       const result = await this.runBrowserLogin(config, options?.timeout);
       this.emit("status", {
         providerId,
         status: result.success ? "complete" : "error",
-        message: result.success
-          ? "Credentials extracted successfully"
-          : result.error || "Login failed",
+        message: result.success ? "Credentials extracted successfully" : (result.error || "Login failed"),
       });
       return result;
     } catch (error) {
@@ -101,10 +87,7 @@ export class InAppLoginService extends EventEmitter {
     try {
       playwright = await import("playwright");
     } catch {
-      return {
-        success: false,
-        error: "Playwright is not installed. Use Electron for native login.",
-      };
+      return { success: false, error: "Playwright is not installed. Use Electron for native login." };
     }
 
     if (this.activeLogin?.aborted) {
@@ -125,11 +108,7 @@ export class InAppLoginService extends EventEmitter {
       const page = await context.newPage();
 
       // Navigate to login URL
-      this.emit("status", {
-        providerId,
-        status: "navigating",
-        message: `Loading ${config.loginUrl}`,
-      });
+      this.emit("status", { providerId, status: "navigating", message: `Loading ${config.loginUrl}` });
       await page.goto(config.loginUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
 
       // Poll for success URL + token extraction
@@ -139,11 +118,7 @@ export class InAppLoginService extends EventEmitter {
 
       for (let i = 0; i < maxPolls; i++) {
         if (this.activeLogin?.aborted) {
-          this.emit("status", {
-            providerId,
-            status: "cancelled",
-            message: "Login cancelled by user",
-          });
+          this.emit("status", { providerId, status: "cancelled", message: "Login cancelled by user" });
           return { success: false, error: "Login cancelled" };
         }
 
@@ -172,7 +147,8 @@ export class InAppLoginService extends EventEmitter {
             const domain = source.domain || undefined;
             const matched = cookies.find(
               (c: any) =>
-                c.name === source.name && (!domain || c.domain.includes(domain.replace(/^\./, "")))
+                c.name === source.name &&
+                (!domain || c.domain.includes(domain.replace(/^\./, "")))
             );
             if (matched && !credentials[source.name]) {
               credentials[source.name] = matched.value;
@@ -184,10 +160,7 @@ export class InAppLoginService extends EventEmitter {
         for (const source of tokenSources) {
           if (source.type === "localStorage" && !credentials[source.key]) {
             try {
-              const value = await page.evaluate(
-                (key: string) => localStorage.getItem(key),
-                source.key
-              );
+              const value = await page.evaluate((key: string) => localStorage.getItem(key), source.key);
               if (value && typeof value === "string") {
                 credentials[source.key] = value;
               }
@@ -197,10 +170,7 @@ export class InAppLoginService extends EventEmitter {
           }
           if (source.type === "sessionStorage" && !credentials[source.key]) {
             try {
-              const value = await page.evaluate(
-                (key: string) => sessionStorage.getItem(key),
-                source.key
-              );
+              const value = await page.evaluate((key: string) => sessionStorage.getItem(key), source.key);
               if (value && typeof value === "string") {
                 credentials[source.key] = value;
               }
@@ -212,11 +182,7 @@ export class InAppLoginService extends EventEmitter {
 
         // Check if all required tokens are found
         const requiredKeys = tokenSources.map((s) =>
-          s.type === "cookie"
-            ? s.name
-            : s.type === "localStorage" || s.type === "sessionStorage"
-              ? s.key
-              : s.name
+          s.type === "cookie" ? s.name : s.type === "localStorage" || s.type === "sessionStorage" ? s.key : s.name
         );
         const allFound = requiredKeys.every((k) => credentials[k] !== undefined);
 

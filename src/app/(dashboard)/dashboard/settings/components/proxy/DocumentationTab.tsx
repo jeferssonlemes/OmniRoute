@@ -48,15 +48,16 @@ export default function DocumentationTab() {
 
       <section>
         <h3 className="font-semibold mb-2">{t("freePoolTab")}</h3>
-        <p className="text-sm text-text-muted">{t("proxyDocumentationFreePoolDesc")}</p>
+        <p className="text-sm text-text-muted">
+          {t("proxyDocumentationFreePoolDesc")}
+        </p>
       </section>
 
       <section>
         <h3 className="font-semibold mb-2">Vercel Relay</h3>
         <p className="text-sm text-text-muted">
           {t("proxyDocumentationVercelRelayDescBefore")} (
-          <code className="bg-surface-alt px-1 rounded">x-relay-auth</code>).{" "}
-          {t("proxyDocumentationVercelRelayDescAfter")}
+          <code className="bg-surface-alt px-1 rounded">x-relay-auth</code>). {t("proxyDocumentationVercelRelayDescAfter")}
         </p>
       </section>
     </Card>

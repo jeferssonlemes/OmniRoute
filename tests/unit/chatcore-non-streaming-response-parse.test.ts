@@ -9,7 +9,8 @@ import { parseNonStreamingResponseBody } from "@omniroute/open-sse/handlers/chat
 function makeResponse(body: string, contentType: string): Response {
   return {
     headers: {
-      get: (name: string) => (name.toLowerCase() === "content-type" ? contentType : null),
+      get: (name: string) =>
+        name.toLowerCase() === "content-type" ? contentType : null,
     },
     text: async () => body,
     body: null,

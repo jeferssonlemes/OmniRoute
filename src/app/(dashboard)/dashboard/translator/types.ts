@@ -16,7 +16,12 @@ export type TranslatorTab = "translate" | "monitor";
 export type TranslateMode = "preview" | "send";
 
 // Slugs canônicos dos accordions Advanced (deep-link).
-export type AdvancedSlug = "rawjson" | "pipeline" | "streamtransform" | "testbench" | "compression";
+export type AdvancedSlug =
+  | "rawjson"
+  | "pipeline"
+  | "streamtransform"
+  | "testbench"
+  | "compression";
 
 // Estado do deep-link parseado a partir da querystring (hook useTranslateDeepLink).
 export interface TranslateDeepLink {

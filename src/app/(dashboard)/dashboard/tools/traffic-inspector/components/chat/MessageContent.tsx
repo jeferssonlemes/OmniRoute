@@ -20,10 +20,18 @@ export function MessageContent({ blocks }: MessageContentProps) {
           );
         }
         if (block.type === "tool_use") {
-          return <ToolCallBlock key={i} id={block.id} name={block.name} input={block.input} />;
+          return (
+            <ToolCallBlock key={i} id={block.id} name={block.name} input={block.input} />
+          );
         }
         if (block.type === "tool_result") {
-          return <ToolResultBlock key={i} toolUseId={block.tool_use_id} content={block.content} />;
+          return (
+            <ToolResultBlock
+              key={i}
+              toolUseId={block.tool_use_id}
+              content={block.content}
+            />
+          );
         }
         return null;
       })}

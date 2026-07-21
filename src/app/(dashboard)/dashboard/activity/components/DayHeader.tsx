@@ -11,7 +11,11 @@ export default function DayHeader({ label, dayKey }: DayHeaderProps) {
   const t = useTranslations("activity");
 
   const displayLabel =
-    label === "today" ? t("todayHeader") : label === "yesterday" ? t("yesterdayHeader") : label;
+    label === "today"
+      ? t("todayHeader")
+      : label === "yesterday"
+        ? t("yesterdayHeader")
+        : label;
 
   return (
     <div

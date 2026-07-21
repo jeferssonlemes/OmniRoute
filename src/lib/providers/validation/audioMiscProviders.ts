@@ -13,15 +13,8 @@ import {
 } from "./headers";
 import { toValidationErrorResult, validationRead, validationWrite } from "./transport";
 import { validateDirectChatProvider } from "./directChatProbe";
-import {
-  buildRunwayApiUrl,
-  buildRunwayHeaders,
-  normalizeRunwayBaseUrl,
-} from "@omniroute/open-sse/config/runway.ts";
-import {
-  buildMaritalkChatUrl,
-  buildMaritalkModelsUrl,
-} from "@omniroute/open-sse/config/maritalk.ts";
+import { buildRunwayApiUrl, buildRunwayHeaders, normalizeRunwayBaseUrl } from "@omniroute/open-sse/config/runway.ts";
+import { buildMaritalkChatUrl, buildMaritalkModelsUrl } from "@omniroute/open-sse/config/maritalk.ts";
 import { signAwsRequest } from "@omniroute/open-sse/utils/awsSigV4.ts";
 
 export async function validateDeepgramProvider({ apiKey, providerSpecificData = {} }: any) {
@@ -234,10 +227,7 @@ export async function validateAwsPollyProvider({ apiKey, providerSpecificData = 
   }
 }
 
-export async function validateBailianCodingPlanProvider({
-  apiKey,
-  providerSpecificData = {},
-}: any) {
+export async function validateBailianCodingPlanProvider({ apiKey, providerSpecificData = {} }: any) {
   try {
     const rawBaseUrl =
       normalizeBaseUrl(providerSpecificData.baseUrl) ||
@@ -589,3 +579,4 @@ export async function validatePoeProvider({ apiKey, providerSpecificData = {} }:
 
   return { valid: false, error: "Connection failed while testing Poe" };
 }
+

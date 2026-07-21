@@ -353,7 +353,8 @@ export const AUTO_COMBO_TEMPLATES: AutoComboTemplate[] = [
     categories: ["coding", "chat", "fast"],
     tiers: ["free"],
     strategy: "weighted",
-    systemMessage: "You are a helpful coding assistant. Write clean, efficient code.",
+    systemMessage:
+      "You are a helpful coding assistant. Write clean, efficient code.",
   },
 ];
 

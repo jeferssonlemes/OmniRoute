@@ -1,7 +1,7 @@
 ---
 title: "🗜️ Prompt Compression Guide — OmniRoute"
-version: 3.8.2
-lastUpdated: 2026-05-13
+version: 3.8.40
+lastUpdated: 2026-06-28
 ---
 
 # 🗜️ Prompt Compression Guide — OmniRoute
@@ -181,8 +181,8 @@ Combo: "free-forever"
   Compression Combo: "coding-agent-stack"
   Pipeline: RTK -> Caveman
   Targets:
-    1. gc/gemini-3-flash
-    2. if/kimi-k2-thinking
+    1. if/kimi-k2-thinking
+    2. qw/qwen3-coder-plus
 ```
 
 This lets you use stacked compression on free/coding providers while keeping lite mode on paid

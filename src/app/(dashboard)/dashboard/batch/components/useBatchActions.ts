@@ -66,7 +66,7 @@ export function useBatchActions(opts: {
         setCancelling(false);
       }
     },
-    [opts]
+    [opts],
   );
 
   // ── retry ─────────────────────────────────────────────────────────────────
@@ -99,7 +99,7 @@ export function useBatchActions(opts: {
             "input",
             inputRes.status,
             "error",
-            errorRes.status
+            errorRes.status,
           );
           setError(opts.t("batchActionRetryError"));
           return null;
@@ -124,7 +124,7 @@ export function useBatchActions(opts: {
         formData.append(
           "file",
           new Blob([plan.newJsonl], { type: "application/jsonl" }),
-          `retry-${batch.id}.jsonl`
+          `retry-${batch.id}.jsonl`,
         );
 
         const fileRes = await fetch("/api/v1/files", { method: "POST", body: formData });
@@ -165,7 +165,7 @@ export function useBatchActions(opts: {
         setRetrying(false);
       }
     },
-    [opts]
+    [opts],
   );
 
   // ── download hrefs (pure — no side effects) ───────────────────────────────
@@ -175,7 +175,7 @@ export function useBatchActions(opts: {
       if (!outputFileId) return null;
       return `/api/v1/files/${outputFileId}/content`;
     },
-    []
+    [],
   );
 
   const downloadHrefErrors = useCallback(
@@ -183,7 +183,7 @@ export function useBatchActions(opts: {
       if (!errorFileId) return null;
       return `/api/v1/files/${errorFileId}/content`;
     },
-    []
+    [],
   );
 
   return {

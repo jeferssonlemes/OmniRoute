@@ -77,11 +77,12 @@ export default function MemoryEngineStatus({ status, onConfigure }: Props) {
     },
     {
       label: t("engine.vectorStoreLabel"),
-      chip: status.vectorStore.available
-        ? "green"
-        : status.vectorStore.backend === "none"
-          ? "gray"
-          : "red",
+      chip:
+        status.vectorStore.available
+          ? "green"
+          : status.vectorStore.backend === "none"
+            ? "gray"
+            : "red",
       reason: status.vectorStore.reason,
       cta:
         status.vectorStore.backend === "none" ? (

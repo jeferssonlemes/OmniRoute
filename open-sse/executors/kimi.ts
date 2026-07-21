@@ -1,5 +1,6 @@
+
 import { DefaultExecutor } from "./default.ts";
-import { ExecuteInput, type ProviderCredentials } from "./base.ts";
+import {  ExecuteInput, type ProviderCredentials } from "./base.ts";
 import { applyProviderRequestDefaults } from "../services/providerRequestDefaults.ts";
 import { NON_ANTHROPIC_THINKING_PLACEHOLDER } from "../translator/helpers/claudeHelper.ts";
 type JsonRecord = Record<string, unknown>;
@@ -14,28 +15,17 @@ function hasActiveKimiThinking(body: JsonRecord): boolean {
 }
 
 function hasNonEmptyReasoningContent(message: JsonRecord): boolean {
-  return (
-    typeof message.reasoning_content === "string" && message.reasoning_content.trim().length > 0
-  );
+  return typeof message.reasoning_content === "string" && message.reasoning_content.trim().length > 0;
 }
 
 function isToolUseBlock(value: unknown): value is JsonRecord {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as JsonRecord).type === "tool_use"
-  );
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    (value as JsonRecord).type === "tool_use";
 }
 
 function isThinkingBlock(value: unknown): boolean {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    ((value as JsonRecord).type === "thinking" ||
-      (value as JsonRecord).type === "redacted_thinking")
-  );
+  return !!value && typeof value === "object" && !Array.isArray(value) &&
+    ((value as JsonRecord).type === "thinking" || (value as JsonRecord).type === "redacted_thinking");
 }
 
 function hasAssistantToolCalls(message: JsonRecord): boolean {
@@ -92,6 +82,7 @@ function ensureKimiThinkingContent(message: JsonRecord): JsonRecord {
   return { ...nextMessage, content };
 }
 
+
 function asRecord(value: unknown): JsonRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : null;
 }
@@ -121,6 +112,7 @@ function applyKimiRequestDefaults(body: unknown, defaults?: JsonRecord | null): 
   return modified ? { ...kimiBody, messages } : kimiBody;
 }
 
+
 export class KimiExecutor extends DefaultExecutor {
   constructor(provider = "kimi-coding") {
     super(provider);
@@ -135,6 +127,7 @@ export class KimiExecutor extends DefaultExecutor {
     const cleanedBody = super.transformRequest(model, body, stream, credentials);
     return applyKimiRequestDefaults(cleanedBody);
   }
+  
 }
 
 export default KimiExecutor;

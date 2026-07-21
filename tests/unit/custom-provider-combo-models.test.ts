@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { getModelCatalogSourceLabel, normalizeModelCatalogSource } =
-  await import("../../src/shared/utils/modelCatalogSearch.ts");
+const { getModelCatalogSourceLabel, normalizeModelCatalogSource } = await import(
+  "../../src/shared/utils/modelCatalogSearch.ts"
+);
 
 // Ported from upstream PR decolua/9router#2018 (Hamsa_M):
 // custom (openai-/anthropic-compatible) providers in the combo model-select modal
@@ -66,7 +67,10 @@ test("fetched models merge with alias models, deduping by id", () => {
   }>;
 
   assert.equal(merged.length, 2);
-  assert.deepEqual(merged.map((m) => m.id).sort(), ["gpt-3.5", "gpt-4"]);
+  assert.deepEqual(
+    merged.map((m) => m.id).sort(),
+    ["gpt-3.5", "gpt-4"]
+  );
   const auto = merged.find((m) => m.id === "gpt-3.5");
   assert.equal(auto?.source, "auto");
   // The pre-existing alias entry keeps its original (non-auto) identity.
@@ -81,7 +85,10 @@ test("fetched ids fall back across id/slug/model/name keys", () => {
     [],
     [{ slug: "llama-3" }, { model: "mixtral" }, { name: "qwen" }]
   ) as Array<{ id: string; value: string }>;
-  assert.deepEqual(merged.map((m) => m.id).sort(), ["llama-3", "mixtral", "qwen"]);
+  assert.deepEqual(
+    merged.map((m) => m.id).sort(),
+    ["llama-3", "mixtral", "qwen"]
+  );
   assert.equal(merged.find((m) => m.id === "llama-3")?.value, "p/llama-3");
 });
 

@@ -119,13 +119,11 @@ test("parseFlowOperationResult: done with base64 video (documented shape)", () =
 
 test("parseFlowOperationResult: done with gcsUri/uri video", () => {
   assert.equal(
-    parseFlowOperationResult({ done: true, response: { videos: [{ gcsUri: "gs://b/v.mp4" }] } })
-      .url,
+    parseFlowOperationResult({ done: true, response: { videos: [{ gcsUri: "gs://b/v.mp4" }] } }).url,
     "gs://b/v.mp4"
   );
   assert.equal(
-    parseFlowOperationResult({ done: true, response: { videos: [{ uri: "https://x/v.mp4" }] } })
-      .url,
+    parseFlowOperationResult({ done: true, response: { videos: [{ uri: "https://x/v.mp4" }] } }).url,
     "https://x/v.mp4"
   );
 });

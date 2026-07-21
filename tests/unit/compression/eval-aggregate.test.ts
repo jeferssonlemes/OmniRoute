@@ -3,50 +3,17 @@ import assert from "node:assert/strict";
 import { aggregateRecords } from "../../../open-sse/services/compression/eval/aggregate.ts";
 import type { EvalRecord, RunStamps } from "../../../open-sse/services/compression/eval/types.ts";
 
-const stamps: RunStamps = {
-  answerModel: "m",
-  judgeModel: "j",
-  corpusHash: "abc",
-  sampleSize: "all",
-};
+const stamps: RunStamps = { answerModel: "m", judgeModel: "j", corpusHash: "abc", sampleSize: "all" };
 
 const records: EvalRecord[] = [
-  {
-    id: "p1",
-    kind: "prose",
-    fidelity: "same",
-    goldFull: true,
-    goldCompressed: true,
-    savings: { tokensBefore: 100, tokensAfter: 50, ratio: 0.5 },
-    errored: false,
-  },
-  {
-    id: "p2",
-    kind: "prose",
-    fidelity: "materially-differs",
-    goldFull: true,
-    goldCompressed: false,
-    savings: { tokensBefore: 200, tokensAfter: 80, ratio: 0.4 },
-    errored: false,
-  },
-  {
-    id: "c1",
-    kind: "code",
-    fidelity: "same",
-    goldFull: null,
-    goldCompressed: null,
-    savings: { tokensBefore: 60, tokensAfter: 30, ratio: 0.5 },
-    errored: false,
-  },
-  {
-    id: "e1",
-    kind: "logs",
-    fidelity: "unparseable",
-    goldFull: null,
-    goldCompressed: null,
-    savings: { tokensBefore: 0, tokensAfter: 0, ratio: 1 },
-    errored: true,
-  },
+  { id: "p1", kind: "prose", fidelity: "same", goldFull: true, goldCompressed: true,
+    savings: { tokensBefore: 100, tokensAfter: 50, ratio: 0.5 }, errored: false },
+  { id: "p2", kind: "prose", fidelity: "materially-differs", goldFull: true, goldCompressed: false,
+    savings: { tokensBefore: 200, tokensAfter: 80, ratio: 0.4 }, errored: false },
+  { id: "c1", kind: "code", fidelity: "same", goldFull: null, goldCompressed: null,
+    savings: { tokensBefore: 60, tokensAfter: 30, ratio: 0.5 }, errored: false },
+  { id: "e1", kind: "logs", fidelity: "unparseable", goldFull: null, goldCompressed: null,
+    savings: { tokensBefore: 0, tokensAfter: 0, ratio: 1 }, errored: true },
 ];
 
 describe("eval aggregate", () => {

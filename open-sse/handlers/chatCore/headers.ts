@@ -44,3 +44,66 @@ export function resolveCompressionHeader(
   const value = (getHeaderValueCaseInsensitive(headers, "x-omniroute-compression") || "").trim();
   return value || null;
 }
+
+/**
+ * Per-request opt-in to unconditionally strip `reasoning_content` from the
+ * non-streaming JSON response via the `x-omniroute-strip-reasoning` header.
+ * Some clients (e.g. Firecrawl AI SDK) have JSON parsers that break on this
+ * non-standard OpenAI extension even though it's syntactically valid, and even
+ * on reasoning-only messages that the default sanitizer keeps. Truthy values:
+ * `true` / `1` / `yes` (case-insensitive). Ported from upstream 9router#517
+ * (closes upstream #509). Reasoning is still captured for the replay cache
+ * before this header is consulted, so the cache feature is unaffected.
+ */
+export function isStripReasoningRequested(
+  headers: Record<string, unknown> | Headers | null | undefined
+): boolean {
+  const value = (getHeaderValueCaseInsensitive(headers, "x-omniroute-strip-reasoning") || "")
+    .trim()
+    .toLowerCase();
+  return value === "true" || value === "1" || value === "yes";
+}
+
+/**
+ * Resolve a stable conversation/session id for call-log analytics (ClickHouse
+ * mirror), covering as many client shapes as possible. Different clients expose
+ * the session in different places (verified against stored ClickHouse bodies):
+ *   1. Claude Code  → `x-claude-code-session-id` header
+ *   2. OpenCode     → `x-opencode-session` header
+ *   3. Claude body  → `metadata.user_id` (JSON string) → `.session_id`
+ *   4. Codex body   → `prompt_cache_key` / `session_id` / `conversation_id`
+ * Returns null when no signal is present (e.g. generic SDK callers).
+ */
+export function resolveChatLogSessionId(
+  headers: Record<string, unknown> | Headers | null | undefined,
+  body: Record<string, unknown> | null | undefined
+): string | null {
+  const headerSid =
+    getHeaderValueCaseInsensitive(headers, "x-claude-code-session-id") ||
+    getHeaderValueCaseInsensitive(headers, "x-opencode-session");
+  if (headerSid) return headerSid;
+
+  if (body && typeof body === "object") {
+    // Claude embeds identity as a JSON string under metadata.user_id.
+    const metadata = body.metadata as Record<string, unknown> | undefined;
+    const rawUserId = metadata?.user_id;
+    if (typeof rawUserId === "string" && rawUserId.trim()) {
+      try {
+        const parsed = JSON.parse(rawUserId) as { session_id?: unknown };
+        if (typeof parsed.session_id === "string" && parsed.session_id.trim()) {
+          return parsed.session_id.trim();
+        }
+      } catch {
+        // Not JSON — fall through to other signals.
+      }
+    }
+
+    // Codex-style per-conversation identifiers live at the body root.
+    for (const key of ["prompt_cache_key", "session_id", "conversation_id"]) {
+      const value = body[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  }
+
+  return null;
+}

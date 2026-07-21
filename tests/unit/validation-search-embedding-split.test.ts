@@ -12,7 +12,7 @@ const HOST = await import("../../src/lib/providers/validation.ts");
 
 test("searchProviders exposes the search validators + the per-provider config map", () => {
   assert.equal(typeof (search as Record<string, unknown>).validateSearchProvider, "function");
-  assert.equal(typeof (search as Record<string, unknown>).validateGenericProvider, "function");
+  assert.equal("validateGenericProvider" in search, false);
   const cfg = (search as Record<string, Record<string, unknown>>).SEARCH_VALIDATOR_CONFIGS;
   assert.ok(cfg && typeof cfg === "object");
   assert.ok(

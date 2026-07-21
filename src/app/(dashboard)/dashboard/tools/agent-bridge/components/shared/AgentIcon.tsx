@@ -16,7 +16,10 @@ export function AgentIcon({ icon, color, size = 20 }: AgentIconProps) {
         height: size + 12,
       }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: size, color }}>
+      <span
+        className="material-symbols-outlined"
+        style={{ fontSize: size, color }}
+      >
         {icon}
       </span>
     </div>

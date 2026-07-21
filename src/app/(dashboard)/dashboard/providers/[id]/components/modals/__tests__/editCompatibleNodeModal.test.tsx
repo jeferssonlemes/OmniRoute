@@ -55,12 +55,7 @@ describe("EditCompatibleNodeModal (Phase 1b extraction)", () => {
   it("renders nothing harmful when closed", () => {
     expect(() =>
       renderModal(
-        <EditCompatibleNodeModal
-          isOpen={false}
-          node={null}
-          onSave={async () => {}}
-          onClose={() => {}}
-        />
+        <EditCompatibleNodeModal isOpen={false} node={null} onSave={async () => {}} onClose={() => {}} />
       )
     ).not.toThrow();
   });

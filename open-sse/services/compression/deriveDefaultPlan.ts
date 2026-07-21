@@ -8,6 +8,7 @@ const SINGLE_MODE_OF: Record<string, string> = {
   aggressive: "aggressive",
   ultra: "ultra",
   rtk: "rtk",
+  omniglyph: "omniglyph",
 };
 
 export type CompressionSource =
@@ -36,7 +37,7 @@ export interface DerivedPlan {
  */
 export function deriveDefaultPlan(
   engines: Record<string, EngineToggle>,
-  masterEnabled: boolean
+  masterEnabled: boolean,
 ): DerivedPlan {
   if (!masterEnabled) return { mode: "off", stackedPipeline: [] };
 

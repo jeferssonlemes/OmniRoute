@@ -37,10 +37,14 @@ export default function ProviderMetrics({ metrics }: ProviderMetricsProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted font-mono">
       {/* TTFT */}
-      <span title="Time to first token (client-side estimate)">TTFT {formatMs(ttftMs)}</span>
+      <span title="Time to first token (client-side estimate)">
+        TTFT {formatMs(ttftMs)}
+      </span>
 
       {/* TPS */}
-      <span title="Tokens per second (client-side estimate)">· {formatTps(tps)}</span>
+      <span title="Tokens per second (client-side estimate)">
+        · {formatTps(tps)}
+      </span>
 
       {/* Token counts */}
       <span title="Prompt tokens ↑ / Completion tokens ↓">

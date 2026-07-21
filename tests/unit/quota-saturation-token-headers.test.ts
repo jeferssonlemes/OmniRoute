@@ -70,11 +70,7 @@ test("Anthropic token reset (RFC3339) is normalized to epoch ms", () => {
   const sig = getTokenHeaderSaturation("anthropic", "anth-conn-2");
   assert.ok(sig, "expected signal");
   const expected = Date.parse("2026-01-01T00:00:30Z");
-  assert.equal(
-    sig!.resetAt,
-    expected,
-    `resetAt should be RFC3339 epoch ${expected}, got ${sig!.resetAt}`
-  );
+  assert.equal(sig!.resetAt, expected, `resetAt should be RFC3339 epoch ${expected}, got ${sig!.resetAt}`);
   // fully exhausted → saturation 1.
   assert.equal(sig!.saturation, 1);
 });

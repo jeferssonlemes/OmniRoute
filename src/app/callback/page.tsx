@@ -16,7 +16,9 @@ import { useEffect, useState } from "react";
  */
 export default function CallbackPage() {
   const [status, setStatus] = useState<"processing" | "success" | "done" | "manual">("processing");
-  const [currentUrl] = useState(() => (typeof window === "undefined" ? "" : window.location.href));
+  const [currentUrl] = useState(() =>
+    typeof window === "undefined" ? "" : window.location.href
+  );
   const t = useTranslations("auth");
 
   useEffect(() => {

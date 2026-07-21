@@ -33,9 +33,12 @@ describe("OpencodeExecutor — DeepSeek reasoning_content injection (#1099)", ()
   }
 
   it("injects reasoning_content on an assistant message that lacks it (deepseek model)", () => {
-    const out = executor.transformRequest("oc/deepseek-v4-flash-free", buildBody({}), true, {
-      apiKey: "test",
-    } as never);
+    const out = executor.transformRequest(
+      "oc/deepseek-v4-flash-free",
+      buildBody({}),
+      true,
+      { apiKey: "test" } as never
+    );
     const assistant = out.messages.find((m: { role: string }) => m.role === "assistant");
     assert.equal(typeof assistant.reasoning_content, "string");
     assert.ok(

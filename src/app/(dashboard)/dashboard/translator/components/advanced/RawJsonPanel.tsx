@@ -59,7 +59,7 @@ export default function RawJsonPanel({
       if (next) setHasOpened(true);
       onOpenChange?.(next);
     },
-    [onOpenChange]
+    [onOpenChange],
   );
 
   // ── Translator state (copied from PlaygroundMode.tsx) ──────────────────────
@@ -238,10 +238,7 @@ export default function RawJsonPanel({
   return (
     <Collapsible
       title={tr("advancedRawJsonTitle", "Raw JSON (auto-detecção + Monaco)")}
-      subtitle={tr(
-        "advancedRawJsonSubtitle",
-        "Cole um request JSON; o formato é detectado automaticamente."
-      )}
+      subtitle={tr("advancedRawJsonSubtitle", "Cole um request JSON; o formato é detectado automaticamente.")}
       icon="code"
       defaultOpen={defaultOpen || forceOpen}
       className="border-black/5 dark:border-white/5"
@@ -369,16 +366,12 @@ export default function RawJsonPanel({
                 </span>
                 {translationPath === "hub-and-spoke" ? (
                   <span>
-                    {tr("translationPathHubSpoke", "")
-                      .replace("{source}", FORMAT_META[sourceFormat]?.label ?? sourceFormat)
-                      .replace("{target}", FORMAT_META[targetFormat]?.label ?? targetFormat) ||
+                    {tr("translationPathHubSpoke", "").replace("{source}", FORMAT_META[sourceFormat]?.label ?? sourceFormat).replace("{target}", FORMAT_META[targetFormat]?.label ?? targetFormat) ||
                       `${FORMAT_META[sourceFormat]?.label ?? sourceFormat} → OpenAI → ${FORMAT_META[targetFormat]?.label ?? targetFormat}`}
                   </span>
                 ) : translationPath === "direct" ? (
                   <span>
-                    {tr("translationPathDirect", "")
-                      .replace("{source}", FORMAT_META[sourceFormat]?.label ?? sourceFormat)
-                      .replace("{target}", FORMAT_META[targetFormat]?.label ?? targetFormat) ||
+                    {tr("translationPathDirect", "").replace("{source}", FORMAT_META[sourceFormat]?.label ?? sourceFormat).replace("{target}", FORMAT_META[targetFormat]?.label ?? targetFormat) ||
                       `${FORMAT_META[sourceFormat]?.label ?? sourceFormat} → ${FORMAT_META[targetFormat]?.label ?? targetFormat}`}
                   </span>
                 ) : (
@@ -626,12 +619,15 @@ export default function RawJsonPanel({
                 </div>
                 {activeTemplate && (
                   <div className="flex items-center gap-2 text-xs text-text-muted">
-                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">
+                    <span
+                      className="material-symbols-outlined text-[14px]"
+                      aria-hidden="true"
+                    >
                       info
                     </span>
                     {tr("templateLoadHint", "Template loaded for format: {format}").replace(
                       "{format}",
-                      FORMAT_META[sourceFormat]?.label ?? sourceFormat
+                      FORMAT_META[sourceFormat]?.label ?? sourceFormat,
                     )}
                   </div>
                 )}

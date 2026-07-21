@@ -69,6 +69,9 @@ test("drops pin on a long rate-limit window (beyond grace)", () => {
 });
 
 test("keeps pin if ANY connection is usable (terminal + healthy mix)", () => {
-  const conns = [{ testStatus: "credits_exhausted", backoffLevel: 0 }, healthy];
+  const conns = [
+    { testStatus: "credits_exhausted", backoffLevel: 0 },
+    healthy,
+  ];
   assert.equal(pinIsDurablyUnhealthy("CLOSED", conns, NOW, opts), false);
 });

@@ -41,10 +41,7 @@ export function hashToken(token: string): string {
 const RELAY_IP_PER_MINUTE = Number(process.env.RELAY_IP_PER_MINUTE || "30");
 const ipBuckets = new Map<string, { count: number; windowStart: number }>();
 
-export function checkIpRateLimit(
-  tokenId: string,
-  ip: string
-): { allowed: boolean; resetIn: number } {
+export function checkIpRateLimit(tokenId: string, ip: string): { allowed: boolean; resetIn: number } {
   if (!Number.isFinite(RELAY_IP_PER_MINUTE) || RELAY_IP_PER_MINUTE <= 0) {
     return { allowed: true, resetIn: 0 };
   }

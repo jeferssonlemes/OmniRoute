@@ -55,7 +55,10 @@ export async function PATCH(request: Request, { params }: RouteParams): Promise<
         await syncQuotaCombos(pool.id);
       } catch (err) {
         // Guard: combo-sync failure must never break group rename callers.
-        console.warn("[quota-groups] syncQuotaCombos failed (non-fatal):", (err as Error)?.message);
+        console.warn(
+          "[quota-groups] syncQuotaCombos failed (non-fatal):",
+          (err as Error)?.message,
+        );
       }
     }
 

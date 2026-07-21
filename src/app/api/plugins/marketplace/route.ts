@@ -16,7 +16,10 @@ export async function GET(request: NextRequest) {
   if (authError) return authError;
   try {
     const plugins = await listMarketplacePlugins();
-    return NextResponse.json({ plugins }, { headers: CORS_HEADERS });
+    return NextResponse.json(
+      { plugins },
+      { headers: CORS_HEADERS }
+    );
   } catch (err: unknown) {
     console.error("[plugins/marketplace] Failed to list marketplace plugins:", err);
     return NextResponse.json(buildErrorBody(500, "Failed to list marketplace plugins"), {

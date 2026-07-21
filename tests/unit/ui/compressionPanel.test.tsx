@@ -2,7 +2,10 @@
 import React, { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ENGINE_IDS, engineMeta } from "../../../open-sse/services/compression/engineCatalog.ts";
+import {
+  ENGINE_IDS,
+  engineMeta,
+} from "../../../open-sse/services/compression/engineCatalog.ts";
 
 // i18n does not resolve to a real locale in vitest/jsdom, so mock next-intl to echo
 // the key. This test therefore asserts ONLY on i18n-independent strings: catalog
@@ -122,8 +125,9 @@ function setupFetchMock(): { puts: CapturedPut[] } {
 describe("CompressionPanel", () => {
   it("renders a row for every engine id in the catalog", async () => {
     setupFetchMock();
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
 
     let container!: HTMLElement;
     await act(async () => {
@@ -141,8 +145,9 @@ describe("CompressionPanel", () => {
 
   it("shows the rtk level 'standard' as selected", async () => {
     setupFetchMock();
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
 
     let container!: HTMLElement;
     await act(async () => {
@@ -159,8 +164,9 @@ describe("CompressionPanel", () => {
 
   it("toggling caveman PUTs engines.caveman.enabled === true", async () => {
     const { puts } = setupFetchMock();
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
 
     let container!: HTMLElement;
     await act(async () => {
@@ -196,8 +202,9 @@ describe("CompressionPanel", () => {
 
   it("derived-pipeline preview reflects the enabled engines", async () => {
     setupFetchMock();
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
 
     let container!: HTMLElement;
     await act(async () => {

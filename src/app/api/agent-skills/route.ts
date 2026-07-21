@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     if (!parsed.success) {
       return NextResponse.json(
         buildErrorBody(400, parsed.error.issues[0]?.message ?? "Invalid query parameters"),
-        { status: 400 }
+        { status: 400 },
       );
     }
 

@@ -12,8 +12,9 @@ const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "omni-comp-analytics-t
 process.env.DATA_DIR = testDataDir;
 
 const coreDb = await import("../../src/lib/db/core.ts");
-const { writeCompressionAnalytics } =
-  await import("../../open-sse/handlers/chatCore/compressionAnalyticsWrite.ts");
+const { writeCompressionAnalytics } = await import(
+  "../../open-sse/handlers/chatCore/compressionAnalyticsWrite.ts"
+);
 
 type Stats = Parameters<typeof writeCompressionAnalytics>[0]["stats"];
 

@@ -82,11 +82,48 @@ function buildEngineBreakdownRows(stats: CompressionStats, requestId: string) {
   }));
 }
 
+/**
+ * Record an attempted-but-no-op compression run (#4268). The pipeline ran (mode
+ * active, engines executed) but produced no recordable saving — without this, the
+ * row is dropped and "ran but saved nothing" is indistinguishable from "never ran".
+ * Writes a single skip row (tokens_saved = 0, skip_reason set); no engine breakdown,
+ * to keep skips out of the saving aggregates.
+ */
+export function writeCompressionSkip(opts: WriteOpts, skipReason: string): Promise<void> {
+  return (async () => {
+    try {
+      const { insertCompressionAnalyticsRow } = await import("@/lib/db/compressionAnalytics");
+      const { stats } = opts;
+      insertCompressionAnalyticsRow({
+        timestamp: new Date().toISOString(),
+        combo_id: opts.comboName ?? null,
+        provider: opts.provider ?? null,
+        mode: opts.mode,
+        engine: stats.engine ?? opts.mode,
+        compression_combo_id: stats.compressionComboId ?? opts.compressionComboId ?? null,
+        original_tokens: stats.originalTokens,
+        compressed_tokens: stats.compressedTokens,
+        tokens_saved: 0,
+        duration_ms: stats.durationMs ?? null,
+        request_id: opts.skillRequestId,
+        skip_reason: skipReason,
+      });
+    } catch (err) {
+      opts.log?.debug?.(
+        "COMPRESSION",
+        "Compression skip-analytics write skipped: " +
+          (err instanceof Error ? err.message : String(err))
+      );
+    }
+  })();
+}
+
 export function writeCompressionAnalytics(opts: WriteOpts): Promise<void> {
   return (async () => {
     try {
-      const { insertCompressionAnalyticsRow, insertCompressionEngineBreakdown } =
-        await import("@/lib/db/compressionAnalytics");
+      const { insertCompressionAnalyticsRow, insertCompressionEngineBreakdown } = await import(
+        "@/lib/db/compressionAnalytics"
+      );
       const { calculateCost } = await import("@/lib/usage/costCalculator");
       const { stats } = opts;
       const tokensSaved = Math.max(0, stats.originalTokens - stats.compressedTokens);
@@ -97,9 +134,7 @@ export function writeCompressionAnalytics(opts: WriteOpts): Promise<void> {
         { input: tokensSaved },
         { serviceTier: opts.effectiveServiceTier }
       );
-      insertCompressionAnalyticsRow(
-        buildAnalyticsRow(opts, tokensSaved, rtkPointers, estimatedUsdSaved)
-      );
+      insertCompressionAnalyticsRow(buildAnalyticsRow(opts, tokensSaved, rtkPointers, estimatedUsdSaved));
       const breakdownRows = buildEngineBreakdownRows(stats, opts.skillRequestId);
       if (breakdownRows.length > 0) {
         insertCompressionEngineBreakdown(breakdownRows);

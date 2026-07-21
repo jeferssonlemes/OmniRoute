@@ -112,6 +112,11 @@ test("GithubExecutor.transformRequest injects JSON response instructions for Cla
         reasoning_text: "internal",
         reasoning_content: "internal",
       },
+      // Trailing user turn: dropTrailingAssistantPrefill (9router#2143) strips a
+      // conversation that ends in "assistant", which would otherwise remove the very
+      // message this test inspects below. Keep the array ending in "user" so this test
+      // stays focused on response_format injection + reasoning-field stripping.
+      { role: "user", content: "thanks" },
     ],
   };
 
@@ -225,6 +230,11 @@ test("GithubExecutor.transformRequest leaves string content and missing content 
         role: "assistant",
         tool_calls: [{ id: "c1", type: "function", function: { name: "f", arguments: "{}" } }],
       },
+      // Trailing tool response: dropTrailingAssistantPrefill (9router#2143) strips a
+      // conversation that ends in "assistant", which would otherwise remove the very
+      // tool_calls message this test inspects below. A real tool round-trip ends in
+      // "tool", not "assistant" — model that shape instead.
+      { role: "tool", tool_call_id: "c1", content: "result" },
     ],
   };
   const result = executor.transformRequest("claude-sonnet-4.6", body, true, {});
@@ -245,10 +255,10 @@ test("GithubExecutor.buildHeaders prefers Copilot token and sets GitHub-specific
 
   assert.equal(headers.Authorization, "Bearer copilot-token");
   assert.equal(headers.Accept, "text/event-stream");
-  assert.equal(headers["editor-version"], "vscode/1.117.0");
-  assert.equal(headers["editor-plugin-version"], "copilot-chat/0.45.1");
-  assert.equal(headers["user-agent"], "GitHubCopilotChat/0.45.1");
-  assert.equal(headers["x-github-api-version"], "2025-04-01");
+  assert.equal(headers["editor-version"], "vscode/1.126.0");
+  assert.equal(headers["editor-plugin-version"], "copilot-chat/0.54.0");
+  assert.equal(headers["user-agent"], "GitHubCopilotChat/0.54.0");
+  assert.equal(headers["x-github-api-version"], "2026-06-01");
   assert.equal(headers["openai-intent"], "conversation-panel");
   assert.equal(headers["X-Initiator"], "user");
   assert.ok(headers["x-request-id"]);

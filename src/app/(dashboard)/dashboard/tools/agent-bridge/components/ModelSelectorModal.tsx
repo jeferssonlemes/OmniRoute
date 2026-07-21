@@ -115,7 +115,9 @@ export function ModelSelectorModal({
               }`}
             >
               <span className="font-mono text-xs">{m.id}</span>
-              {m.name !== m.id && <span className="ml-2 text-text-muted text-xs">{m.name}</span>}
+              {m.name !== m.id && (
+                <span className="ml-2 text-text-muted text-xs">{m.name}</span>
+              )}
             </button>
           ))}
         </div>

@@ -36,12 +36,7 @@ const TABS: TabConfig[] = [
  * Top bar with tab switcher, token/cost counter, and export code button.
  * Export code modal uses ExportCodeModal (F7) when exportState is provided.
  */
-export default function StudioTopBar({
-  activeTab,
-  onTabChange,
-  metrics,
-  exportState,
-}: StudioTopBarProps) {
+export default function StudioTopBar({ activeTab, onTabChange, metrics, exportState }: StudioTopBarProps) {
   const t = useTranslations("playground");
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -111,7 +106,9 @@ export default function StudioTopBar({
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
-            <p className="text-sm text-text-muted">{t("noStateToExport")}</p>
+            <p className="text-sm text-text-muted">
+              {t("noStateToExport")}
+            </p>
           </div>
         </div>
       )}

@@ -79,9 +79,9 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
     const msg = sanitizeErrorMessage(err);
-    return new Response(JSON.stringify(buildErrorBody(500, msg || "Failed to start HTTP proxy")), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify(buildErrorBody(500, msg || "Failed to start HTTP proxy")),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
   }
 }

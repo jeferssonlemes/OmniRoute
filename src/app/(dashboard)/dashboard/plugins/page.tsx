@@ -43,13 +43,13 @@ export default function PluginsPage() {
   useEffect(() => {
     fetchPlugins();
     fetch("/api/settings")
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => res.ok ? res.json() : null)
       .then((data) => {
         if (data?.pluginMarketplaceUrl) setMarketplaceUrl(data.pluginMarketplaceUrl);
       })
       .catch(() => {});
   }, [fetchPlugins]);
-
+  
   const fetchMarketplace = useCallback(async () => {
     try {
       const res = await fetch("/api/plugins/marketplace");
@@ -59,13 +59,13 @@ export default function PluginsPage() {
       }
     } catch {}
   }, []);
-
+  
   useEffect(() => {
     if (activeTab === "marketplace") {
       fetchMarketplace();
     }
   }, [activeTab, fetchMarketplace]);
-
+  
   const handleSaveUrl = async () => {
     setSavingUrl(true);
     try {
@@ -108,17 +108,11 @@ export default function PluginsPage() {
     try {
       const res = await fetch(`/api/plugins/${name}/${endpoint}`, { method: "POST" });
       if (res.ok) {
-        addNotification({
-          type: "success",
-          message: enable ? t("activated", { name }) : t("deactivated", { name }),
-        });
+        addNotification({ type: "success", message: enable ? t("activated", { name }) : t("deactivated", { name }) });
         await fetchPlugins();
       }
     } catch {
-      addNotification({
-        type: "error",
-        message: enable ? t("activateFailed", { name }) : t("deactivateFailed", { name }),
-      });
+      addNotification({ type: "error", message: enable ? t("activateFailed", { name }) : t("deactivateFailed", { name }) });
     }
   };
 
@@ -144,16 +138,10 @@ export default function PluginsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">{t("title")}</h1>
         <div className="flex gap-2">
-          <Button
-            variant={activeTab === "installed" ? "primary" : "secondary"}
-            onClick={() => setActiveTab("installed")}
-          >
+          <Button variant={activeTab === "installed" ? "primary" : "secondary"} onClick={() => setActiveTab("installed")}>
             {t("installedTab")}
           </Button>
-          <Button
-            variant={activeTab === "marketplace" ? "primary" : "secondary"}
-            onClick={() => setActiveTab("marketplace")}
-          >
+          <Button variant={activeTab === "marketplace" ? "primary" : "secondary"} onClick={() => setActiveTab("marketplace")}>
             {t("marketplaceTab")}
           </Button>
         </div>
@@ -162,9 +150,7 @@ export default function PluginsPage() {
       {activeTab === "marketplace" && (
         <Card className="p-4 flex gap-4 items-end bg-gray-50">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              {t("marketplaceUrlLabel")}
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t("marketplaceUrlLabel")}</label>
             <input
               type="text"
               className="w-full rounded border-gray-300 p-2"
@@ -187,7 +173,10 @@ export default function PluginsPage() {
             </Button>
           </div>
           {plugins.length === 0 ? (
-            <EmptyState title={t("noPlugins")} description={t("noPluginsDescription")} />
+            <EmptyState
+              title={t("noPlugins")}
+              description={t("noPluginsDescription")}
+            />
           ) : (
             <div className="grid gap-4">
               {plugins.map((plugin) => (
@@ -218,7 +207,10 @@ export default function PluginsPage() {
                       >
                         {plugin.enabled ? t("deactivate") : t("activate")}
                       </Button>
-                      <Button variant="danger" onClick={() => handleUninstall(plugin.name)}>
+                      <Button
+                        variant="danger"
+                        onClick={() => handleUninstall(plugin.name)}
+                      >
                         {t("uninstall")}
                       </Button>
                     </div>
@@ -231,7 +223,7 @@ export default function PluginsPage() {
       ) : (
         <div className="grid gap-4">
           {marketplacePlugins.length === 0 ? (
-            <div className="text-gray-500 py-4">{t("marketplaceEmpty")}</div>
+             <div className="text-gray-500 py-4">{t("marketplaceEmpty")}</div>
           ) : (
             marketplacePlugins.map((plugin) => (
               <Card key={plugin.name} className="p-4">
@@ -246,10 +238,7 @@ export default function PluginsPage() {
                     </p>
                     <div className="mt-1 flex gap-1">
                       {plugin.tags?.map((tag: string) => (
-                        <span
-                          key={tag}
-                          className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-                        >
+                        <span key={tag} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
                           {tag}
                         </span>
                       ))}
@@ -259,10 +248,7 @@ export default function PluginsPage() {
                     <Button
                       variant="primary"
                       onClick={() => {
-                        addNotification({
-                          type: "info",
-                          message: t("marketplaceInstallComingSoon"),
-                        });
+                        addNotification({ type: "info", message: t("marketplaceInstallComingSoon") });
                       }}
                     >
                       {t("install")}

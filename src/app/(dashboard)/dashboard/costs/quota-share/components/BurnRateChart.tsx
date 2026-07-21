@@ -59,10 +59,7 @@ export default function BurnRateChart({ usage }: BurnRateChartProps) {
 
   const data = Array.from({ length: pointCount + 1 }, (_, i) => {
     const t2 = nowMs + i * intervalMs;
-    const projected = Math.min(
-      currentConsumed + tokensPerSecond * ((i * intervalMs) / 1000),
-      limit
-    );
+    const projected = Math.min(currentConsumed + tokensPerSecond * ((i * intervalMs) / 1000), limit);
     return {
       time: new Date(t2).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
       consumed: Math.round(projected),
@@ -82,12 +79,7 @@ export default function BurnRateChart({ usage }: BurnRateChartProps) {
       <div className="h-24">
         <RechartsResponsiveContainer width="100%" height="100%">
           <RechartsLineChart data={data}>
-            <RechartsXAxis
-              dataKey="time"
-              tick={{ fontSize: 9 }}
-              tickLine={false}
-              axisLine={false}
-            />
+            <RechartsXAxis dataKey="time" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
             <RechartsYAxis hide />
             <RechartsTooltip
               contentStyle={{

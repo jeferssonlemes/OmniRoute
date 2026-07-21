@@ -10,10 +10,7 @@ import { upsertProviderNodeById } from "../../src/app/(dashboard)/dashboard/prov
 test("appends a node with a new id (#4746)", () => {
   const prev = [{ id: "a", name: "A" }];
   const next = upsertProviderNodeById(prev, { id: "b", name: "B" });
-  assert.deepEqual(
-    next.map((n) => n.id),
-    ["a", "b"]
-  );
+  assert.deepEqual(next.map((n) => n.id), ["a", "b"]);
 });
 
 test("does not append a duplicate id — same identical payload returns prev unchanged (#4746)", () => {
@@ -24,10 +21,7 @@ test("does not append a duplicate id — same identical payload returns prev unc
 });
 
 test("replaces an existing id when the payload changed (#4746)", () => {
-  const prev = [
-    { id: "a", name: "A" },
-    { id: "b", name: "B" },
-  ];
+  const prev = [{ id: "a", name: "A" }, { id: "b", name: "B" }];
   const next = upsertProviderNodeById(prev, { id: "a", name: "A2" });
   assert.equal(next.length, 2);
   assert.equal(next.find((n) => n.id === "a")?.name, "A2");

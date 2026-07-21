@@ -110,11 +110,7 @@ export default function PresetPicker({ configState, setConfigState }: PresetPick
             aria-label={t("loadPreset")}
           >
             <option value="" disabled>
-              {loading
-                ? t("loadingPresets")
-                : presets.length === 0
-                  ? t("noPresets")
-                  : t("loadPresetPlaceholder")}
+              {loading ? t("loadingPresets") : presets.length === 0 ? t("noPresets") : t("loadPresetPlaceholder")}
             </option>
             {presets.map((preset) => (
               <option key={preset.id} value={preset.id}>
@@ -190,7 +186,9 @@ export default function PresetPicker({ configState, setConfigState }: PresetPick
                 className="text-xs bg-bg-alt border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary text-text-main"
               />
 
-              {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+              {saveError && (
+                <p className="text-xs text-destructive">{saveError}</p>
+              )}
 
               <div className="flex items-center justify-end gap-2">
                 <button

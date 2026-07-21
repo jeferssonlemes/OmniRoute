@@ -96,9 +96,7 @@ export default function CostEstimateStep({
 
           {/* Stats */}
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-xs text-[var(--color-text-muted)]">
-              {t("wizardCostRequests")}
-            </span>
+            <span className="text-xs text-[var(--color-text-muted)]">{t("wizardCostRequests")}</span>
             <span className="text-xs text-[var(--color-text-muted)]">
               {estimate.totalRequests.toLocaleString()} ·{" "}
               {estimate.estimatedInputTokens.toLocaleString()} {t("wizardCostInputTok")} ·{" "}
@@ -118,9 +116,7 @@ export default function CostEstimateStep({
       )}
 
       {/* Disclaimer */}
-      <p className="text-xs text-[var(--color-text-muted)] italic">
-        {t("wizardCostEstimatedNotice")}
-      </p>
+      <p className="text-xs text-[var(--color-text-muted)] italic">{t("wizardCostEstimatedNotice")}</p>
 
       {/* Warnings */}
       {estimate && estimate.warnings.length > 0 && (
@@ -155,9 +151,7 @@ export default function CostEstimateStep({
       >
         {creating ? (
           <>
-            <span className="material-symbols-outlined text-sm animate-spin">
-              progress_activity
-            </span>
+            <span className="material-symbols-outlined text-sm animate-spin">progress_activity</span>
             {t("wizardCreating")}
           </>
         ) : (

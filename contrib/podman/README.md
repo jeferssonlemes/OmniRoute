@@ -106,13 +106,13 @@ podman compose --profile base up -d
 
 Same profiles as `docker compose`:
 
-| Profile                        | Command                                      |
-| ------------------------------ | -------------------------------------------- |
-| `base` (no CLIs)               | `podman compose --profile base up -d`        |
-| `web` (+Chromium/Playwright)   | `podman compose --profile web up -d`         |
-| `cli` (+CLI tools)             | `podman compose --profile cli up -d`         |
-| `host` (host-mounted binaries) | `podman compose --profile host up -d`        |
-| `cliproxyapi` (sidecar)        | `podman compose --profile cliproxyapi up -d` |
+| Profile                        | Command                                              |
+| ------------------------------ | ---------------------------------------------------- |
+| `base` (no CLIs)               | `podman compose --profile base up -d`                |
+| `web` (+Chromium/Playwright)   | `podman compose --profile web up -d`                 |
+| `cli` (+CLI tools)             | `podman compose --profile cli up -d`                 |
+| `host` (host-mounted binaries) | `podman compose --profile host up -d`                |
+| `cliproxyapi` (sidecar)        | `podman compose --profile cliproxyapi up -d`         |
 
 ---
 
@@ -124,6 +124,5 @@ works with both Docker and Podman without a separate compose file.
 
 The entrypoint script (`check-permissions.sh`) reads `CONTAINER_HOST`
 from `.env` to give the correct fix instructions:
-
 - **docker**: `sudo chown -R ... ./data`
 - **podman**: `podman unshare chown 1000:1000 ./data`

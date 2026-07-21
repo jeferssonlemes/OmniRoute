@@ -11,7 +11,9 @@ export class PollinationsExecutor extends BaseExecutor {
 
   buildUrl(_model: string, _stream: boolean, urlIndex = 0, _credentials = null): string {
     const baseUrls = this.getBaseUrls();
-    return baseUrls[urlIndex] || baseUrls[0] || "https://gen.pollinations.ai/v1/chat/completions";
+    return (
+      baseUrls[urlIndex] || baseUrls[0] || "https://gen.pollinations.ai/v1/chat/completions"
+    );
   }
 
   buildHeaders(credentials: any, stream = true): Record<string, string> {
@@ -36,7 +38,13 @@ export class PollinationsExecutor extends BaseExecutor {
     if (typeof body === "object" && body !== null) {
       body.model = model;
       body.stream = stream;
-      body.jsonMode = true;
+      // #3981: Pollinations treats jsonMode=true as "the model MUST return JSON"
+      // and rejects (HTTP 400) any request whose messages don't mention "json".
+      // Only enable it when the caller actually asked for JSON output.
+      const responseFormatType = body.response_format?.type;
+      if (responseFormatType === "json_object" || responseFormatType === "json_schema") {
+        body.jsonMode = true;
+      }
     }
     return body;
   }

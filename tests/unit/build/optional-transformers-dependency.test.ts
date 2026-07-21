@@ -25,14 +25,7 @@ test("@huggingface/transformers is optional so onnxruntime CUDA install failures
 
 test("package-lock marks transformers and its onnxruntime runtime as optional", () => {
   const lock = readJson<{
-    packages: Record<
-      string,
-      {
-        optional?: boolean;
-        dependencies?: Record<string, string>;
-        optionalDependencies?: Record<string, string>;
-      }
-    >;
+    packages: Record<string, { optional?: boolean; dependencies?: Record<string, string>; optionalDependencies?: Record<string, string> }>;
   }>("package-lock.json");
 
   assert.equal(

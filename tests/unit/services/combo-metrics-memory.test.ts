@@ -78,11 +78,7 @@ test("recordComboRequest: tracks fallback count", () => {
   assert.ok(metrics);
   assert.equal(metrics.totalFallbacks, 2, "should track 2 fallbacks");
   // fallbackRate = (totalFallbacks / totalRequests) * 100 = (2/1) * 100 = 200
-  assert.equal(
-    metrics.fallbackRate,
-    200,
-    "fallback rate should be 200% (2 fallbacks on 1 request)"
-  );
+  assert.equal(metrics.fallbackRate, 200, "fallback rate should be 200% (2 fallbacks on 1 request)");
 });
 
 // ─── getComboMetrics returns null for unknown combos ─────────────────────────
@@ -195,10 +191,7 @@ test("eviction: inserting a new combo at capacity evicts the oldest entry", () =
     return m && m.totalRequests > 0;
   }).length;
   // Map size should not exceed MAX (the new one replaced the oldest)
-  assert.ok(
-    totalProduction <= MAX,
-    `production combos (${totalProduction}) should not exceed cap (${MAX})`
-  );
+  assert.ok(totalProduction <= MAX, `production combos (${totalProduction}) should not exceed cap (${MAX})`);
   assert.ok(
     getComboMetrics("new-after-capacity"),
     "newly inserted combo should exist after eviction"
@@ -215,7 +208,10 @@ test("eviction: shadow metrics respect their own MAX_METRICS_ENTRIES cap", () =>
       latencyMs: 10,
     });
   }
-  assert.ok(getComboMetrics("shadow-fill-0"), "first shadow combo should exist at capacity");
+  assert.ok(
+    getComboMetrics("shadow-fill-0"),
+    "first shadow combo should exist at capacity"
+  );
 
   // Insert one more shadow — should trigger eviction
   recordComboShadowRequest("shadow-after-capacity", "gpt-4", {

@@ -37,22 +37,22 @@ echo "API_KEY_SECRET=$(openssl rand -hex 32)" >> .env
 
 Variabel-variabel utama untuk pengembangan:
 
-| Variable               | Development Default      | Deskripsi                 |
-| ---------------------- | ------------------------ | ------------------------- |
-| `PORT`                 | `20128`                  | Port server               |
-| `NEXT_PUBLIC_BASE_URL` | `http://localhost:20128` | URL dasar untuk frontend  |
-| `JWT_SECRET`           | (generate above)         | Kunci penandatanganan JWT |
-| `INITIAL_PASSWORD`     | `CHANGEME`               | Kata sandi login pertama  |
-| `APP_LOG_LEVEL`        | `info`                   | Tingkat verbositas log    |
+| Variable               | Development Default      | Deskripsi                         |
+| ---------------------- | ------------------------ | --------------------------------- |
+| `PORT`                 | `20128`                  | Port server                       |
+| `NEXT_PUBLIC_BASE_URL` | `http://localhost:20128` | URL dasar untuk frontend          |
+| `JWT_SECRET`           | (generate above)         | Kunci penandatanganan JWT         |
+| `INITIAL_PASSWORD`     | `CHANGEME`               | Kata sandi login pertama          |
+| `APP_LOG_LEVEL`        | `info`                   | Tingkat verbositas log            |
 
 ### Pengaturan Dashboard
 
 Dashboard menyediakan tombol UI untuk fitur-fitur yang juga dapat dikonfigurasi melalui variabel lingkungan:
 
-| Lokasi Pengaturan   | Tombol             | Deskripsi                            |
-| ------------------- | ------------------ | ------------------------------------ |
-| Settings → Advanced | Debug Mode         | Aktifkan log permintaan debug (UI)   |
-| Settings → General  | Sidebar Visibility | Tampilkan/sembunyikan bagian sidebar |
+| Lokasi Pengaturan   | Tombol             | Deskripsi                                |
+| ------------------- | ------------------ | ---------------------------------------- |
+| Settings → Advanced | Debug Mode         | Aktifkan log permintaan debug (UI)       |
+| Settings → General  | Sidebar Visibility | Tampilkan/sembunyikan bagian sidebar     |
 
 Pengaturan ini disimpan di database dan tetap ada setelah restart, menggantikan nilai default variabel lingkungan jika sudah diatur.
 
@@ -91,14 +91,14 @@ git push -u origin feat/your-feature-name
 
 ### Penamaan Cabang
 
-| Awalan      | Tujuan                   |
-| ----------- | ------------------------ |
-| `feat/`     | Fitur baru               |
-| `fix/`      | Perbaikan bug            |
-| `refactor/` | Restrukturisasi kode     |
-| `docs/`     | Perubahan dokumentasi    |
-| `test/`     | Penambahan/perbaikan tes |
-| `chore/`    | Perkakas, CI, dependensi |
+| Awalan      | Tujuan                         |
+| ----------- | ------------------------------ |
+| `feat/`     | Fitur baru                     |
+| `fix/`      | Perbaikan bug                  |
+| `refactor/` | Restrukturisasi kode           |
+| `docs/`     | Perubahan dokumentasi          |
+| `test/`     | Penambahan/perbaikan tes       |
+| `chore/`    | Perkakas, CI, dependensi       |
 
 ### Pesan Commit
 

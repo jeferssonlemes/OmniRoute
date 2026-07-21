@@ -25,11 +25,7 @@ interface SearchResponse {
   results: SearchResult[];
   cached: boolean;
   usage: { queries_used: number; search_cost_usd: number };
-  metrics: {
-    response_time_ms: number;
-    upstream_latency_ms: number;
-    total_results_available: number | null;
-  };
+  metrics: { response_time_ms: number; upstream_latency_ms: number; total_results_available: number | null };
 }
 
 interface SearchProvider {
@@ -50,12 +46,7 @@ interface SearchTabProps {
 
 import { useState, useRef } from "react";
 
-export default function SearchTab({
-  configState,
-  providers,
-  catalogProviders,
-  onMetrics,
-}: SearchTabProps) {
+export default function SearchTab({ configState, providers, catalogProviders, onMetrics }: SearchTabProps) {
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [rawJson, setRawJson] = useState("");
   const [loading, setLoading] = useState(false);
@@ -101,10 +92,7 @@ export default function SearchTab({
 
       if (res.ok) {
         setResponse(data);
-        onMetrics?.(
-          data.metrics?.response_time_ms ?? duration,
-          data.usage?.search_cost_usd ?? null
-        );
+        onMetrics?.(data.metrics?.response_time_ms ?? duration, data.usage?.search_cost_usd ?? null);
       } else {
         setError(data.error?.message || data.error || `Error ${res.status}`);
         onMetrics?.(duration, null);
@@ -126,11 +114,7 @@ export default function SearchTab({
     abortRef.current?.abort();
   };
 
-  const handleHistoryReplay = (entry: {
-    query: string;
-    provider: string;
-    filters: Record<string, unknown>;
-  }) => {
+  const handleHistoryReplay = (entry: { query: string; provider: string; filters: Record<string, unknown> }) => {
     handleSearch({
       query: entry.query,
       provider: entry.provider || "",

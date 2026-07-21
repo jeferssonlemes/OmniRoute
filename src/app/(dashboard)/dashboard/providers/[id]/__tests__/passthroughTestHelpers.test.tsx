@@ -9,7 +9,10 @@
 //
 // Pure-function tests — no DOM, no component rendering.
 import { describe, expect, it } from "vitest";
-import { buildPassthroughTestBody, shouldSwitchToVisibleFilter } from "../providerPageHelpers";
+import {
+  buildPassthroughTestBody,
+  shouldSwitchToVisibleFilter,
+} from "../providerPageHelpers";
 
 // ---------------------------------------------------------------------------
 // buildPassthroughTestBody

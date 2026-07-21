@@ -28,7 +28,8 @@ describe("preservation ReDoS guard (#4795)", () => {
   });
 
   it("does not hang on Windows-path-style payloads with backslashes after a `$`", () => {
-    const evil = "$C:\\Users\\Alpha\\Net\\DESKTOP\\" + "sub\\".repeat(120) + "no-closing-dollar";
+    const evil =
+      "$C:\\Users\\Alpha\\Net\\DESKTOP\\" + "sub\\".repeat(120) + "no-closing-dollar";
     const start = Date.now();
     extractPreservedBlocks(evil);
     assert.ok(Date.now() - start < 1000, "Windows-path payload must resolve quickly");

@@ -153,7 +153,9 @@ export async function GET(request: Request): Promise<Response> {
 
           // Try to extract endpoint from config file
           const configPath = getCliPrimaryConfigPath(toolId);
-          const endpoint = configPath ? await extractEndpointFromConfig(toolId, configPath) : null;
+          const endpoint = configPath
+            ? await extractEndpointFromConfig(toolId, configPath)
+            : null;
 
           const result: ToolBatchStatus = {
             detection: {
@@ -201,11 +203,8 @@ export async function GET(request: Request): Promise<Response> {
     return NextResponse.json(statuses);
   } catch (err) {
     logger.error({ err }, "Unexpected error in /api/cli-tools/all-statuses");
-    return NextResponse.json(
-      buildErrorBody(500, err instanceof Error ? err.message : String(err)),
-      {
-        status: 500,
-      }
-    );
+    return NextResponse.json(buildErrorBody(500, err instanceof Error ? err.message : String(err)), {
+      status: 500,
+    });
   }
 }

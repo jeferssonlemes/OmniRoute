@@ -41,6 +41,7 @@ interface TopBarControlsProps {
   onSessionDelete: (id: string) => void;
 }
 
+
 export function TopBarControls({
   filters,
   onProfileChange,
@@ -93,7 +94,9 @@ export function TopBarControls({
             onClick={() => onProfileChange(id)}
             className={cn(
               "px-2 py-0.5 text-xs rounded focus-ring",
-              profile === id ? "bg-blue-600 text-white" : "text-text-muted hover:text-text-main"
+              profile === id
+                ? "bg-blue-600 text-white"
+                : "text-text-muted hover:text-text-main"
             )}
           >
             {profileLabels[id]}
@@ -113,7 +116,9 @@ export function TopBarControls({
       {/* Status filter */}
       <select
         value={filters.status ?? ""}
-        onChange={(e) => onStatusChange((e.target.value as ListFilters["status"]) || undefined)}
+        onChange={(e) =>
+          onStatusChange((e.target.value as ListFilters["status"]) || undefined)
+        }
         className="rounded border border-border bg-bg-subtle px-2 py-1 text-xs text-text-main focus:outline-none focus:ring-1 focus:ring-blue-500"
       >
         <option value="">{t("anyStatus")}</option>

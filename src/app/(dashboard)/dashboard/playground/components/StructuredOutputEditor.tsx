@@ -31,7 +31,9 @@ const DEFAULT_SCHEMA: StructuredOutputSchemaInput = {
 export default function StructuredOutputEditor({ structuredOutput }: StructuredOutputEditorProps) {
   const { enabled, schema, error, setEnabled, setSchema } = structuredOutput;
 
-  const [schemaRaw, setSchemaRaw] = useState(JSON.stringify(schema ?? DEFAULT_SCHEMA, null, 2));
+  const [schemaRaw, setSchemaRaw] = useState(
+    JSON.stringify(schema ?? DEFAULT_SCHEMA, null, 2),
+  );
   const [nameField, setNameField] = useState(schema?.name ?? "my_schema");
   const [parseError, setParseError] = useState<string | null>(null);
 
@@ -61,7 +63,9 @@ export default function StructuredOutputEditor({ structuredOutput }: StructuredO
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium text-text-main">JSON mode</span>
-          <span className="text-[11px] text-text-muted">Forces response_format: json_schema</span>
+          <span className="text-[11px] text-text-muted">
+            Forces response_format: json_schema
+          </span>
         </div>
         <button
           role="switch"
@@ -113,12 +117,16 @@ export default function StructuredOutputEditor({ structuredOutput }: StructuredO
 
           {/* Errors */}
           {(parseError ?? error) && (
-            <p className="text-xs text-destructive">{parseError ?? error}</p>
+            <p className="text-xs text-destructive">
+              {parseError ?? error}
+            </p>
           )}
 
           {/* Status — show when schema is set and no errors */}
           {schema != null && !parseError && !error && (
-            <p className="text-xs text-green-600 dark:text-green-400">✓ Schema validated</p>
+            <p className="text-xs text-green-600 dark:text-green-400">
+              ✓ Schema validated
+            </p>
           )}
 
           {/* Validate button */}

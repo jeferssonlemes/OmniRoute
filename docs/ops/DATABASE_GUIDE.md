@@ -1,7 +1,7 @@
 ---
 title: "Database Schema & Operations Guide"
-version: 3.8.16
-lastUpdated: 2026-06-08
+version: 3.8.40
+lastUpdated: 2026-06-28
 ---
 
 # Database Schema & Operations Guide
@@ -12,7 +12,7 @@ lastUpdated: 2026-06-08
 
 - `src/lib/db/core.ts` — singleton + SCHEMA_SQL (17 base tables)
 - `src/lib/db/migrationRunner.ts` — versioned migrations
-- `src/lib/db/migrations/` — 94 versioned SQL files
+- `src/lib/db/migrations/` — 106 versioned SQL files
 - `src/lib/db/encryption.ts` — encryption helpers
 - `src/lib/db/backup.ts` — backup export/import
 - `src/lib/db/healthCheck.ts` — health diagnostics
@@ -78,16 +78,16 @@ DATA_DIR=/custom/path omniroute
 
 ## Domain Module Architecture
 
-OmniRoute's database has **76 domain modules** in `src/lib/db/`. Each module:
+OmniRoute's database has **94 domain modules** in `src/lib/db/`. Each module:
 
 - Owns one or more specific tables
 - Exports typed CRUD functions
 - Never touches another module's tables
 - Uses `getDbInstance()` from `core.ts` to access the DB
 
-### The 76 DB Modules
+### The 94 DB Modules
 
-OmniRoute has **76 module files** in `src/lib/db/`. Below is a sampling of core modules; see the directory listing for the complete list:
+OmniRoute has **94 module files** in `src/lib/db/`. Below is a sampling of core modules; see the directory listing for the complete list:
 
 | Module                  | Tables                                                         | Responsibility                                                            |
 | ----------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -620,7 +620,7 @@ To prevent this, always test migrations on a copy first.
 
 ## See Also
 
-- [USAGE_QUOTA_GUIDE.md](../features/USAGE_QUOTA_GUIDE.md) — usage tables
+- [USAGE_QUOTA_GUIDE.md](../guides/USAGE_QUOTA_GUIDE.md) — usage tables
 - [MONITORING_GUIDE.md](./MONITORING_GUIDE.md) — health monitoring
 - [RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md) — release flow
 - Source: `src/lib/db/` (80+ files, ~25K LOC)

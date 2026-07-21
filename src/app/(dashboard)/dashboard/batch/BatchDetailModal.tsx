@@ -141,24 +141,12 @@ function formatTs(ts: number | null | undefined): string {
   });
 }
 
-export default function BatchDetailModal({
-  batch,
-  files,
-  onClose,
-  onActionDone,
-}: BatchDetailModalProps) {
+export default function BatchDetailModal({ batch, files, onClose, onActionDone }: BatchDetailModalProps) {
   const t = useTranslations("common");
 
   // ── Action hook (F7) ─────────────────────────────────────────────────────────
-  const {
-    cancelling,
-    retrying,
-    error: actionError,
-    cancel,
-    retry,
-    downloadHrefOutput,
-    downloadHrefErrors,
-  } = useBatchActions({ onRefresh: onActionDone, t });
+  const { cancelling, retrying, error: actionError, cancel, retry, downloadHrefOutput, downloadHrefErrors } =
+    useBatchActions({ onRefresh: onActionDone, t });
 
   // ── Status flags ──────────────────────────────────────────────────────────────
   const isTerminal = ["completed", "failed", "cancelled", "expired"].includes(batch.status);
@@ -207,10 +195,7 @@ export default function BatchDetailModal({
               pending_actions
             </span>
             <div>
-              <h2
-                id="batch-detail-modal-title"
-                className="text-base font-semibold text-[var(--color-text-main)]"
-              >
+              <h2 id="batch-detail-modal-title" className="text-base font-semibold text-[var(--color-text-main)]">
                 Batch Details
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
@@ -453,7 +438,7 @@ export default function BatchDetailModal({
                   if (
                     window.confirm(
                       t("batchDetailActionRetry") +
-                        ` (${batch.requestCountsFailed} ${t("batchActionRetry")})?`
+                        ` (${batch.requestCountsFailed} ${t("batchActionRetry")})?`,
                     )
                   ) {
                     const result = await retry({

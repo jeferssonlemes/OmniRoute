@@ -9,7 +9,11 @@
  */
 import { buildErrorBody } from "../utils/error.ts";
 
-export function buildAntigravityUpstreamError(status: number, statusText: string, rawBody: string) {
+export function buildAntigravityUpstreamError(
+  status: number,
+  statusText: string,
+  rawBody: string
+) {
   let upstreamDetails: unknown;
   try {
     upstreamDetails = JSON.parse(rawBody);

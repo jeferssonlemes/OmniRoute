@@ -13,7 +13,10 @@ import { getSkillById, fetchSkillMarkdown } from "@/lib/agentSkills/catalog";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const { id } = await params;
 
@@ -36,9 +39,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const markdown = await fetchSkillMarkdown(id);
 
     // Return the full markdown content (frontmatter + body reconstructed)
-    const content = markdown.frontmatter.name
-      ? `---\nname: ${markdown.frontmatter.name}\ndescription: ${markdown.frontmatter.description}\n---\n${markdown.body}`
-      : markdown.body;
+    const content =
+      markdown.frontmatter.name
+        ? `---\nname: ${markdown.frontmatter.name}\ndescription: ${markdown.frontmatter.description}\n---\n${markdown.body}`
+        : markdown.body;
 
     return new Response(content, {
       status: 200,
@@ -56,7 +60,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     if (message.includes("GitHub raw fetch failed")) {
       return new Response(
         JSON.stringify(buildErrorBody(502, "Upstream fetch failed — try again later")),
-        { status: 502, headers: { "Content-Type": "application/json" } }
+        { status: 502, headers: { "Content-Type": "application/json" } },
       );
     }
 

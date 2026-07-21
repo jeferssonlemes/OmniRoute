@@ -7,8 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { buildPostCallGuardrailContext } =
-  await import("../../open-sse/handlers/chatCore/postCallGuardrailContext.ts");
+const { buildPostCallGuardrailContext } = await import(
+  "../../open-sse/handlers/chatCore/postCallGuardrailContext.ts"
+);
 
 function baseArgs(overrides: Record<string, unknown> = {}) {
   return {

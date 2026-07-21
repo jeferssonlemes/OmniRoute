@@ -29,14 +29,10 @@ vi.mock("next-intl", () => ({
       "endpoint.showInternal": "Show internal",
       "endpoint.hideInternal": "Hide internal",
       "endpoint.vscodeAliasTitle": "VS Code Token Alias",
-      "endpoint.vscodeAliasDescriptionReady":
-        "Ready-to-paste compatibility URLs using the /api/v1/vscode/{token}/... endpoint.",
-      "endpoint.vscodeAliasDescriptionError":
-        "Showing placeholder URLs because CLI keys could not be loaded in this session.",
-      "endpoint.vscodeAliasDescriptionLoading":
-        "Loading CLI keys. Placeholder URLs are shown until a key is available.",
-      "endpoint.vscodeAliasDescriptionPlaceholder":
-        "Showing placeholder URLs. Create or activate an API key in CLI Tools to replace {token}.",
+      "endpoint.vscodeAliasDescriptionReady": "Ready-to-paste compatibility URLs using the /api/v1/vscode/{token}/... endpoint.",
+      "endpoint.vscodeAliasDescriptionError": "Showing placeholder URLs because CLI keys could not be loaded in this session.",
+      "endpoint.vscodeAliasDescriptionLoading": "Loading CLI keys. Placeholder URLs are shown until a key is available.",
+      "endpoint.vscodeAliasDescriptionPlaceholder": "Showing placeholder URLs. Create or activate an API key in CLI Tools to replace {token}.",
       "endpoint.vscodeAliasManage": "CLI Tools",
       "endpoint.vscodeAliasBaseLabel": "VS Code base",
       "endpoint.vscodeAliasModelsLabel": "VS Code models",

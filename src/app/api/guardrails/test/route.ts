@@ -33,21 +33,12 @@ export async function POST(request: NextRequest) {
   try {
     rawBody = await request.json();
   } catch {
-    return createErrorResponse({
-      status: 400,
-      message: "Invalid JSON body",
-      type: "invalid_request",
-    });
+    return createErrorResponse({ status: 400, message: "Invalid JSON body", type: "invalid_request" });
   }
 
   const validation = validateBody(TestRequestSchema, rawBody);
   if (isValidationFailure(validation)) {
-    return createErrorResponse({
-      status: 400,
-      message:
-        "Invalid request body — expected { input: string | object | array, disabledGuardrails?: string[] }",
-      type: "invalid_request",
-    });
+    return createErrorResponse({ status: 400, message: "Invalid request body — expected { input: string | object | array, disabledGuardrails?: string[] }", type: "invalid_request" });
   }
   const parsed = validation.data;
 

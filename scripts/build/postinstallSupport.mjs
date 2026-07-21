@@ -17,7 +17,8 @@ export function hasStandaloneAppBundle(rootDir) {
   // legacy app/ location so an upgrade over a partially-replaced install is still
   // detected as a published bundle — mirrors the serve CLI's dist/ -> app/ fallback.
   return (
-    existsSync(join(rootDir, "dist", "server.js")) || existsSync(join(rootDir, "app", "server.js"))
+    existsSync(join(rootDir, "dist", "server.js")) ||
+    existsSync(join(rootDir, "app", "server.js"))
   );
 }
 

@@ -39,10 +39,15 @@ export default function EngineTab() {
 
   // CTA handler for MemoryEngineStatus rows — scrolls to the config card
   // in the same tab so the user can fix the off/missing component.
-  const handleConfigure = useCallback((target: "embedding" | "qdrant" | "rerank") => {
-    const id = `engine-config-${target}`;
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+  const handleConfigure = useCallback(
+    (target: "embedding" | "qdrant" | "rerank") => {
+      const id = `engine-config-${target}`;
+      document
+        .getElementById(id)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    []
+  );
 
   const handleSaveSettings = async (updates: Parameters<typeof saveSettings>[0]) => {
     setSaving(true);
@@ -97,7 +102,9 @@ export default function EngineTab() {
           ) : (
             <MemoryEngineStatus status={status} onConfigure={handleConfigure} />
           )}
-          {reindexMsg && <p className="mt-3 text-xs text-text-muted">{reindexMsg}</p>}
+          {reindexMsg && (
+            <p className="mt-3 text-xs text-text-muted">{reindexMsg}</p>
+          )}
         </div>
       </Card>
 
@@ -127,7 +134,9 @@ export default function EngineTab() {
       {settings && (
         <Card>
           <div id="engine-config-rerank" className="p-4 scroll-mt-4">
-            <h3 className="text-sm font-semibold text-text-main mb-4">{t("engine.rerankTitle")}</h3>
+            <h3 className="text-sm font-semibold text-text-main mb-4">
+              {t("engine.rerankTitle")}
+            </h3>
             <RerankConfigCard
               settings={settings}
               providers={providers}

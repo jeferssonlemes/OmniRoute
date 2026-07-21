@@ -12,6 +12,7 @@ import { addModelsSuffix, normalizeBaseUrl, resolveChatUrl } from "./urlHelpers"
 import { applyCustomUserAgent, buildBearerHeaders } from "./headers";
 import { toValidationErrorResult, validationRead, validationWrite } from "./transport";
 import { validateDirectChatProvider } from "./directChatProbe";
+import { extractCozeValidationError } from "./cozeError";
 
 export async function validateBedrockProvider({ apiKey, providerSpecificData = {} }: any) {
   if (!apiKey) {
@@ -143,6 +144,20 @@ export async function validateOpenAILikeProvider({
       return { valid: true, error: null };
     }
 
+    // #5426: Coze answers the chat probe with a JSON envelope ({ code, msg,
+    // logId, from }) on a bad key. Translate it into a friendly message so the
+    // raw envelope (logId included) never leaks into the connection UI. Scoped
+    // to provider === "coze" so a non-Coze error body that happens to carry a
+    // `msg` field is never mislabeled, and other providers' response bodies are
+    // never consumed here — they fall through to the canned handling below.
+    if (provider === "coze") {
+      const chatErrorBody = await chatRes.text().catch(() => "");
+      const cozeError = extractCozeValidationError(chatErrorBody);
+      if (cozeError) {
+        return { valid: false, error: cozeError };
+      }
+    }
+
     if (chatRes.status === 401 || chatRes.status === 403) {
       return { valid: false, error: "Invalid API key" };
     }
@@ -213,6 +228,35 @@ export async function validateCommandCodeProvider({ apiKey, providerSpecificData
   });
 }
 
+// HuggingFace fine-grained Inference-Provider tokens are valid even when
+// model/task endpoints reject them, so the generic OpenAI-like probe against
+// router.huggingface.co/v1/models falsely marks them invalid. Validate the
+// token strictly as an auth check via the whoami-v2 endpoint instead: only
+// 401/403 means the token is invalid; any other non-OK status is a transient
+// upstream failure, NOT an invalid key.
+export async function validateHuggingFaceProvider({ apiKey }: any) {
+  try {
+    const response = await validationRead("https://huggingface.co/api/whoami-v2", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+
+    if (response.ok) {
+      return { valid: true, error: null, method: "huggingface_whoami" };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return { valid: false, error: "Invalid API key" };
+    }
+
+    // Non-auth, non-OK status — surface as a transient upstream failure rather
+    // than declaring the (potentially valid) fine-grained token invalid.
+    return { valid: false, error: `HuggingFace token check returned ${response.status}` };
+  } catch (error: unknown) {
+    return toValidationErrorResult(error);
+  }
+}
+
 export async function validateGeminiLikeProvider({
   apiKey,
   baseUrl,
@@ -239,16 +283,15 @@ export async function validateGeminiLikeProvider({
         : `${baseForModels}/models`;
 
     // Use the correct auth header based on provider config:
-    // - gemini / gemini-cli (API key): x-goog-api-key
-    // - gemini-cli (OAuth): Bearer token
+    // - gemini (API key): x-goog-api-key
+    // - Google OAuth access tokens (ya29.*): Bearer token
     const headers: Record<string, string> = {};
     let urlWithKey = requestUrl;
 
     if (typeof apiKey === "string" && apiKey.startsWith("ya29.")) {
       // A Google OAuth access token (ya29.*) must use Bearer auth even when the
-      // connection is configured as an API-key provider — gemini-cli OAuth stores the
-      // access token in the apiKey field. Checked first so authType "apikey"/"header"
-      // doesn't shadow it with x-goog-api-key.
+      // connection is configured as an API-key provider. Checked first so authType
+      // "apikey"/"header" doesn't shadow it with x-goog-api-key.
       headers["Authorization"] = `Bearer ${apiKey}`;
     } else if (normalizedAuthType === "header" || normalizedAuthType === "apikey") {
       headers["x-goog-api-key"] = apiKey;

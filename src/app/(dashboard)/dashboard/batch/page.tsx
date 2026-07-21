@@ -15,7 +15,7 @@ const BATCH_SUPPORTED = ["openai", "anthropic", "gemini"];
 const MODEL_DEFAULTS: Record<string, string[]> = {
   openai: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
   anthropic: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-  gemini: ["gemini-1.5-flash", "gemini-1.5-pro"],
+  gemini: ["gemini-2.5-flash", "gemini-2.5-pro"],
 };
 const PROVIDER_NAMES: Record<string, string> = {
   openai: "OpenAI",
@@ -35,7 +35,7 @@ export default function BatchPage() {
   const [showWizard, setShowWizard] = useState(false);
   const [createdBanner, setCreatedBanner] = useState<string | null>(null);
   const [providers, setProviders] = useState<Array<{ id: string; name: string; models: string[] }>>(
-    []
+    [],
   );
 
   // Auto-dismiss "batch created" banner after 5s (A-6)
@@ -83,7 +83,7 @@ export default function BatchPage() {
                 batchMap.set(m.id, m);
               }
               return Array.from(batchMap.values()).sort(
-                (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id) // teknik sıralama: ASCII kasıtlı
+                (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id), // teknik sıralama: ASCII kasıtlı
               );
             });
           } else {
@@ -104,7 +104,7 @@ export default function BatchPage() {
                 fileMap.set(m.id, m);
               }
               return Array.from(fileMap.values()).sort(
-                (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id) // teknik sıralama: ASCII kasıtlı
+                (a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id), // teknik sıralama: ASCII kasıtlı
               );
             });
           } else {
@@ -119,7 +119,7 @@ export default function BatchPage() {
         if (opts.appendBatches) setLoadingMore(false);
       }
     },
-    [batchesLastId]
+    [batchesLastId],
   );
 
   // Keep fetchData ref in sync
@@ -147,7 +147,7 @@ export default function BatchPage() {
           const connected = new Set(
             (data.connections ?? [])
               .filter((c) => BATCH_SUPPORTED.includes(c.provider))
-              .map((c) => c.provider)
+              .map((c) => c.provider),
           );
           if (connected.size > 0) {
             setProviders(
@@ -155,7 +155,7 @@ export default function BatchPage() {
                 id,
                 name: PROVIDER_NAMES[id] ?? id,
                 models: MODEL_DEFAULTS[id] ?? [],
-              }))
+              })),
             );
             return;
           }
@@ -169,7 +169,7 @@ export default function BatchPage() {
           id,
           name: PROVIDER_NAMES[id] ?? id,
           models: MODEL_DEFAULTS[id] ?? [],
-        }))
+        })),
       );
     };
     void load();
@@ -232,7 +232,7 @@ export default function BatchPage() {
           fetchDataRef.current?.(true, { appendBatches: true });
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1 },
     );
 
     if (bottomRefBatches.current) {
@@ -272,11 +272,7 @@ export default function BatchPage() {
       {/* Toolbar: auto-refresh indicator + Refresh + New batch */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
-          <span
-            className={`material-symbols-outlined text-[14px] ${loading ? "animate-spin" : "animate-pulse"}`}
-          >
-            sync
-          </span>
+          <span className={`material-symbols-outlined text-[14px] ${loading ? "animate-spin" : "animate-pulse"}`}>sync</span>
           {t("batchListAutoRefresh")}
         </span>
         <div className="flex gap-2">

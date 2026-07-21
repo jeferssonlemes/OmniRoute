@@ -21,7 +21,10 @@ export interface AdvancedSectionProps {
  * forceOpenSlug is forwarded as data-slug on the wrapper div so each
  * accordion child can read it via props passed down by F9's TranslateTab.
  */
-export default function AdvancedSection({ forceOpenSlug, children }: AdvancedSectionProps) {
+export default function AdvancedSection({
+  forceOpenSlug,
+  children,
+}: AdvancedSectionProps) {
   const t = useTranslations("translator");
 
   /** Safe i18n with inline fallback — pattern from TranslatorPageClient. */
@@ -54,7 +57,7 @@ export default function AdvancedSection({ forceOpenSlug, children }: AdvancedSec
             <p className="text-xs text-text-muted">
               {tr(
                 "advancedSectionSubtitle",
-                "Raw JSON, pipeline e ferramentas técnicas. Tudo aqui é igual às tabs antigas — apenas reorganizado."
+                "Raw JSON, pipeline e ferramentas técnicas. Tudo aqui é igual às tabs antigas — apenas reorganizado.",
               )}
             </p>
           </div>

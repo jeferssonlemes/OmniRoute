@@ -113,9 +113,10 @@ export function useProviderModels(
   const fetchProviderModelMeta = useCallback(async () => {
     if (isSearchProvider) return;
     try {
-      const res = await fetch(`/api/provider-models?provider=${encodeURIComponent(providerId)}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(
+        `/api/provider-models?provider=${encodeURIComponent(providerId)}`,
+        { cache: "no-store" }
+      );
       if (!res.ok) return;
       const data = await res.json();
       setModelMeta({

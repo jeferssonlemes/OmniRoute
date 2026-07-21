@@ -13,12 +13,7 @@ function makeLog() {
 
 test("is a no-op when tracing is disabled", () => {
   const { calls, log } = makeLog();
-  stageTrace("post_translation", undefined, {
-    traceEnabled: false,
-    startTime: 0,
-    traceId: "abc",
-    log,
-  });
+  stageTrace("post_translation", undefined, { traceEnabled: false, startTime: 0, traceId: "abc", log });
   assert.equal(calls.length, 0);
 });
 
@@ -37,16 +32,12 @@ test("emits a STAGE_TRACE line with trace id, label and elapsed ms", () => {
 
 test("appends serialized extra context", () => {
   const { calls, log } = makeLog();
-  stageTrace(
-    "pre_executor",
-    { attempt: 2 },
-    {
-      traceEnabled: true,
-      startTime: Date.now(),
-      traceId: "id",
-      log,
-    }
-  );
+  stageTrace("pre_executor", { attempt: 2 }, {
+    traceEnabled: true,
+    startTime: Date.now(),
+    traceId: "id",
+    log,
+  });
   assert.match(calls[0][1], /\{"attempt":2\}$/);
 });
 

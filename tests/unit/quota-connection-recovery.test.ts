@@ -25,10 +25,7 @@ function conn(overrides: Partial<RecoverableConnectionInput>): RecoverableConnec
 
 test("isRecoverableCooldownConnection: unavailable + elapsed cooldown → recoverable", () => {
   assert.equal(
-    isRecoverableCooldownConnection(
-      conn({ testStatus: "unavailable", rateLimitedUntil: PAST }),
-      NOW
-    ),
+    isRecoverableCooldownConnection(conn({ testStatus: "unavailable", rateLimitedUntil: PAST }), NOW),
     true
   );
 });
@@ -62,10 +59,7 @@ test("isRecoverableCooldownConnection: terminal-status matching is case/space in
 
 test("isRecoverableCooldownConnection: no rateLimitedUntil → NOT recoverable", () => {
   assert.equal(
-    isRecoverableCooldownConnection(
-      conn({ testStatus: "unavailable", rateLimitedUntil: null }),
-      NOW
-    ),
+    isRecoverableCooldownConnection(conn({ testStatus: "unavailable", rateLimitedUntil: null }), NOW),
     false
   );
   assert.equal(

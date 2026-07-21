@@ -79,8 +79,9 @@ test("bifrost route: returns 503 + fallback header when BIFROST_BASE_URL is unse
   delete process.env.BIFROST_STREAMING_ENABLED;
 
   // Dynamic import after env is set so the module reads the empty value.
-  const { POST } =
-    await import("../../../../src/app/api/v1/relay/chat/completions/bifrost/route.ts");
+  const { POST } = await import(
+    "../../../../src/app/api/v1/relay/chat/completions/bifrost/route.ts"
+  );
 
   const req = new Request("http://localhost/api/v1/relay/chat/completions/bifrost", {
     method: "POST",
@@ -195,7 +196,7 @@ test("bifrost route: records relay usage after SSE stream completion", async () 
     new Response(
       new ReadableStream<Uint8Array>({
         start(controller) {
-          controller.enqueue(new TextEncoder().encode('data: {"delta":"hi"}\n\n'));
+          controller.enqueue(new TextEncoder().encode("data: {\"delta\":\"hi\"}\n\n"));
           controller.close();
         },
       }),

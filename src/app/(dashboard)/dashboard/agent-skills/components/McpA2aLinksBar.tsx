@@ -9,7 +9,7 @@ function useOrigin(): string {
   return useSyncExternalStore(
     () => () => {}, // no external subscription needed
     () => (typeof window !== "undefined" ? window.location.origin : ""),
-    () => "" // server snapshot
+    () => "", // server snapshot
   );
 }
 

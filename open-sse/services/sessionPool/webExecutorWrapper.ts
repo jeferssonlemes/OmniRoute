@@ -54,7 +54,7 @@ export function withSessionPool(
   options?: {
     /** When true, wraps the response body for error handling */
     wrapResponse?: boolean;
-  }
+  },
 ): WebExecutorFn {
   const wrapResponse = options?.wrapResponse ?? true;
 

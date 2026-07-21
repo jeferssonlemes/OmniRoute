@@ -180,14 +180,22 @@ describe("phase-1d extractions (#3501)", () => {
 
   it("SiliconFlowEndpointModal mounts when isOpen=false (renders nothing visible)", () => {
     const c = renderComponent(
-      <SiliconFlowEndpointModal isOpen={false} onSelect={vi.fn()} onClose={vi.fn()} />
+      <SiliconFlowEndpointModal
+        isOpen={false}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
     );
     expect(c).toBeDefined();
   });
 
   it("SiliconFlowEndpointModal mounts when isOpen=true without throwing", () => {
     const c = renderComponent(
-      <SiliconFlowEndpointModal isOpen={true} onSelect={vi.fn()} onClose={vi.fn()} />
+      <SiliconFlowEndpointModal
+        isOpen={true}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />
     );
     expect(c).toBeDefined();
   });

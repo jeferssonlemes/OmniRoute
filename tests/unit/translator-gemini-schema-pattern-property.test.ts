@@ -7,8 +7,9 @@ import assert from "node:assert/strict";
 // those keywords. glob/grep tools declare a property literally called `pattern`;
 // deleting it (and then dropping it from `required`) made those tools unusable on
 // `ag/*` (Antigravity) backends.
-const { cleanJSONSchemaForAntigravity } =
-  await import("../../open-sse/translator/helpers/geminiHelper.ts");
+const { cleanJSONSchemaForAntigravity } = await import(
+  "../../open-sse/translator/helpers/geminiHelper.ts"
+);
 
 test("#1368: a property named 'pattern' survives Gemini schema sanitization", () => {
   // Mirrors the grep tool's input schema (property name === constraint keyword).

@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  ACCOUNT_FALLBACK_STRATEGY_VALUES,
-  ROUTING_STRATEGY_VALUES,
-} from "@/shared/constants/routingStrategies";
+import { ROUTING_STRATEGY_VALUES } from "@/shared/constants/routingStrategies";
 import { SUPPORTED_BATCH_ENDPOINTS } from "@/shared/constants/batchEndpoints";
 import { MAX_REQUEST_BODY_LIMIT_MB, MIN_REQUEST_BODY_LIMIT_MB } from "@/shared/constants/bodySize";
 import { COMBO_CONFIG_MODES } from "@/shared/constants/comboConfigMode";
@@ -14,11 +11,6 @@ import {
   isForbiddenCustomHeaderName,
 } from "@/shared/constants/upstreamHeaders";
 import { MAX_TIMER_TIMEOUT_MS } from "@/shared/utils/runtimeTimeouts";
-
-// ──── Settings Schemas ────
-// FASE-01: Removed .passthrough() — only explicitly listed fields are accepted
-
-export const settingsFallbackStrategySchema = z.enum(ACCOUNT_FALLBACK_STRATEGY_VALUES);
 
 // Single source of truth: ../settingsSchemas (the schema the runtime settings route validates
 // against). Re-exported here so this modular barrel stays in exact lockstep — a divergent local
@@ -106,6 +98,15 @@ export const comboCooldownWaitSettingsSchema = z
   })
   .strict();
 
+// FASE 2.1: kill-switch for the per-connection quota-share concurrency limit.
+// The cap itself comes from each connection's max_concurrent, so only `enabled`
+// is configurable here.
+export const quotaShareConcurrencyLimitSettingsSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+  })
+  .strict();
+
 export const providerCooldownSettingsSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -146,6 +147,7 @@ export const updateResilienceSchema = z
       .optional(),
     waitForCooldown: waitForCooldownSettingsSchema.optional(),
     comboCooldownWait: comboCooldownWaitSettingsSchema.optional(),
+    quotaShareConcurrencyLimit: quotaShareConcurrencyLimitSettingsSchema.optional(),
     providerCooldown: providerCooldownSettingsSchema.optional(),
     profiles: z
       .object({
@@ -164,6 +166,7 @@ export const updateResilienceSchema = z
       !value.providerBreaker &&
       !value.waitForCooldown &&
       !value.comboCooldownWait &&
+      !value.quotaShareConcurrencyLimit &&
       !value.providerCooldown &&
       !value.profiles &&
       !value.defaults

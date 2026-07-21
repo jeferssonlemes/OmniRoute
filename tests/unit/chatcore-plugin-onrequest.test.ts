@@ -6,8 +6,9 @@ import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 
 const { registerHook, unregisterHook } = await import("../../src/lib/plugins/hooks.ts");
-const { runPluginOnRequestHook } =
-  await import("../../open-sse/handlers/chatCore/pluginOnRequest.ts");
+const { runPluginOnRequestHook } = await import(
+  "../../open-sse/handlers/chatCore/pluginOnRequest.ts"
+);
 
 const PLUGIN = "test-onrequest-plugin";
 

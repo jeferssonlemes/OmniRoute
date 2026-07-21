@@ -28,9 +28,8 @@ function mount(ui: React.ReactElement): HTMLElement {
 }
 
 beforeEach(() => {
-  (
-    globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
-  ).IS_REACT_ACT_ENVIRONMENT = true;
+  (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+    true;
   intl.locale = "en";
 });
 
@@ -66,8 +65,7 @@ function setupFetchMock() {
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
       const method = (init?.method ?? "GET").toUpperCase();
-      if (url.includes("/api/settings/compression/mcp-accessibility"))
-        return json({ enabled: true });
+      if (url.includes("/api/settings/compression/mcp-accessibility")) return json({ enabled: true });
       if (url.includes("/api/settings/compression")) {
         if (method === "PUT") {
           const body = JSON.parse(String(init?.body ?? "{}"));
@@ -86,8 +84,9 @@ describe("CompressionPanel output styles", () => {
   it("renders one row per catalog style", async () => {
     setupFetchMock();
     intl.locale = "zh-CN"; // a locale that matches every gated style, so all rows render
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
     let container!: HTMLElement;
     await act(async () => {
       container = mount(<CompressionPanel />);
@@ -103,8 +102,9 @@ describe("CompressionPanel output styles", () => {
   it("locale-gates terse-cjk: hidden under a non-zh locale", async () => {
     setupFetchMock();
     intl.locale = "en";
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
     let container!: HTMLElement;
     await act(async () => {
       container = mount(<CompressionPanel />);
@@ -120,8 +120,9 @@ describe("CompressionPanel output styles", () => {
   it("locale-gates terse-cjk: offered under a zh locale (zh-CN base matches)", async () => {
     setupFetchMock();
     intl.locale = "zh-CN";
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
     let container!: HTMLElement;
     await act(async () => {
       container = mount(<CompressionPanel />);
@@ -132,8 +133,9 @@ describe("CompressionPanel output styles", () => {
 
   it("toggling a style PUTs an outputStyles selection", async () => {
     const { puts } = setupFetchMock();
-    const { default: CompressionPanel } =
-      await import("../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel");
+    const { default: CompressionPanel } = await import(
+      "../../../src/app/(dashboard)/dashboard/context/settings/CompressionPanel"
+    );
     let container!: HTMLElement;
     await act(async () => {
       container = mount(<CompressionPanel />);

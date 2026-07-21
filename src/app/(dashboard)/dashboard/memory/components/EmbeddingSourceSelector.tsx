@@ -101,7 +101,7 @@ export default function EmbeddingSourceSelector({ settings, providers, onSave, s
                   <option key={m.id} value={m.id}>
                     {m.name} ({m.dimensions ? `${m.dimensions}d` : "?"})
                   </option>
-                ))
+                )),
               )}
             </select>
           )}

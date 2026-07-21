@@ -88,15 +88,10 @@ export default function AllocationTable({ allocations, usage, keyLabels }: Alloc
                   {deficit !== null ? (
                     <span
                       className={
-                        deficit > 0
-                          ? "text-red-400"
-                          : deficit < 0
-                            ? "text-emerald-400"
-                            : "text-text-muted"
+                        deficit > 0 ? "text-red-400" : deficit < 0 ? "text-emerald-400" : "text-text-muted"
                       }
                     >
-                      {deficit > 0 ? "+" : ""}
-                      {deficit.toLocaleString()}
+                      {deficit > 0 ? "+" : ""}{deficit.toLocaleString()}
                     </span>
                   ) : (
                     <span className="text-text-muted">—</span>

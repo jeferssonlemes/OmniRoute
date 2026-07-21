@@ -21,13 +21,10 @@ test("returns the {providerKey, modelId} pair for each alias-backed entry", () =
     "gpt-4o-mini-fast": "openai/gpt-4o-mini",
   };
   const out = extractAliasBackedModels(aliases);
-  assert.deepEqual(
-    out.sort((a, b) => a.providerKey.localeCompare(b.providerKey)),
-    [
-      { providerKey: "custom", modelId: "kimi-k2.6" },
-      { providerKey: "openai", modelId: "gpt-4o-mini" },
-    ]
-  );
+  assert.deepEqual(out.sort((a, b) => a.providerKey.localeCompare(b.providerKey)), [
+    { providerKey: "custom", modelId: "kimi-k2.6" },
+    { providerKey: "openai", modelId: "gpt-4o-mini" },
+  ]);
 });
 
 test("ignores alias values that are not strings", () => {
@@ -58,13 +55,18 @@ test("preserves the full sub-path when the model id itself contains a slash", ()
     or_alias: "openrouter/anthropic/claude-3.5-sonnet",
   };
   const out = extractAliasBackedModels(aliases);
-  assert.deepEqual(out, [{ providerKey: "openrouter", modelId: "anthropic/claude-3.5-sonnet" }]);
+  assert.deepEqual(out, [
+    { providerKey: "openrouter", modelId: "anthropic/claude-3.5-sonnet" },
+  ]);
 });
 
 test("returns an empty list for an empty / null / undefined input", () => {
   assert.deepEqual(extractAliasBackedModels({}), []);
   assert.deepEqual(extractAliasBackedModels(null as unknown as Record<string, unknown>), []);
-  assert.deepEqual(extractAliasBackedModels(undefined as unknown as Record<string, unknown>), []);
+  assert.deepEqual(
+    extractAliasBackedModels(undefined as unknown as Record<string, unknown>),
+    []
+  );
 });
 
 test("de-duplicates entries that resolve to the same {providerKey, modelId}", () => {

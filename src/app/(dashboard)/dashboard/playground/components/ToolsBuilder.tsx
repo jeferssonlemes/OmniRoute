@@ -31,11 +31,7 @@ export default function ToolsBuilder({ toolsBuilder }: ToolsBuilderProps) {
 
   // Per-tool editing state: index → draft values
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<{
-    name: string;
-    description: string;
-    parametersRaw: string;
-  } | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; description: string; parametersRaw: string } | null>(null);
 
   function handleAdd() {
     let parsed: unknown;
@@ -119,14 +115,19 @@ export default function ToolsBuilder({ toolsBuilder }: ToolsBuilderProps) {
             const toolError = errors.get(idx);
 
             return (
-              <div key={idx} className="border border-border rounded-lg overflow-hidden">
+              <div
+                key={idx}
+                className="border border-border rounded-lg overflow-hidden"
+              >
                 {/* Tool header */}
                 <div className="flex items-center justify-between px-3 py-2 bg-bg-alt">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[14px] text-text-muted">
                       function
                     </span>
-                    <code className="text-xs font-mono text-text-main">{tool.function.name}</code>
+                    <code className="text-xs font-mono text-text-main">
+                      {tool.function.name}
+                    </code>
                     {tool.function.description && (
                       <span className="text-[11px] text-text-muted truncate max-w-[200px]">
                         — {tool.function.description}
@@ -172,14 +173,14 @@ export default function ToolsBuilder({ toolsBuilder }: ToolsBuilderProps) {
                     />
                     <textarea
                       value={editDraft.parametersRaw}
-                      onChange={(e) =>
-                        setEditDraft({ ...editDraft, parametersRaw: e.target.value })
-                      }
+                      onChange={(e) => setEditDraft({ ...editDraft, parametersRaw: e.target.value })}
                       rows={6}
                       className="text-xs font-mono bg-bg-alt border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary text-text-main resize-y"
                       aria-label="JSON schema for parameters"
                     />
-                    {toolError && <p className="text-xs text-destructive">{toolError}</p>}
+                    {toolError && (
+                      <p className="text-xs text-destructive">{toolError}</p>
+                    )}
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleUpdate(idx)}
@@ -237,7 +238,9 @@ export default function ToolsBuilder({ toolsBuilder }: ToolsBuilderProps) {
           />
         </div>
 
-        {formError && <p className="text-xs text-destructive">{formError}</p>}
+        {formError && (
+          <p className="text-xs text-destructive">{formError}</p>
+        )}
 
         <button
           onClick={handleAdd}

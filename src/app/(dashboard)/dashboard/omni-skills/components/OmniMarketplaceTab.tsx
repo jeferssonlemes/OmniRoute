@@ -52,9 +52,7 @@ export function OmniMarketplaceTab({
       if (!res.ok) {
         setMpError((data as { error?: string }).error || t("marketplaceError"));
       } else {
-        setMpResults(
-          Array.isArray(data) ? data : (data as { skills?: MarketplaceSkill[] }).skills || []
-        );
+        setMpResults(Array.isArray(data) ? data : (data as { skills?: MarketplaceSkill[] }).skills || []);
       }
     } catch (err) {
       setMpError(err instanceof Error ? err.message : t("marketplaceError"));
@@ -153,9 +151,7 @@ export function OmniMarketplaceTab({
             type="text"
             value={skillsProvider === "skillsmp" ? mpQuery : shQuery}
             onChange={(e) =>
-              skillsProvider === "skillsmp"
-                ? setMpQuery(e.target.value)
-                : setShQuery(e.target.value)
+              skillsProvider === "skillsmp" ? setMpQuery(e.target.value) : setShQuery(e.target.value)
             }
             onKeyDown={(e) =>
               e.key === "Enter" &&

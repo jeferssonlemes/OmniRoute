@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const { OAUTH_PROVIDERS, getProviderById } =
-  await import("../../src/shared/constants/providers.ts");
+const { OAUTH_PROVIDERS, getProviderById } = await import(
+  "../../src/shared/constants/providers.ts"
+);
 
 test("Qoder provider display label is 'Qoder' (not 'Qoder AI')", () => {
   assert.equal((OAUTH_PROVIDERS as Record<string, { name: string }>).qoder.name, "Qoder");

@@ -16,7 +16,9 @@ export function SseEventList({ events }: SseEventListProps) {
           <span className="text-text-main break-all">{ev.data}</span>
         </div>
       ))}
-      {events.length === 0 && <p className="text-text-muted italic">No SSE events</p>}
+      {events.length === 0 && (
+        <p className="text-text-muted italic">No SSE events</p>
+      )}
     </div>
   );
 }

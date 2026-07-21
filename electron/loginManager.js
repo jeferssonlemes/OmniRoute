@@ -242,8 +242,7 @@ class LoginManager extends EventEmitter {
           for (const source of cookieSources) {
             const domain = source.domain || undefined;
             const matched = cookies.find(
-              (c) =>
-                c.name === source.name && (!domain || c.domain.includes(domain.replace(/^\./, "")))
+              (c) => c.name === source.name && (!domain || c.domain.includes(domain.replace(/^\./, "")))
             );
             if (matched) {
               credentials[source.name] = matched.value;
@@ -257,8 +256,7 @@ class LoginManager extends EventEmitter {
 
           if (storageSources.length > 0 && this.window && !this.window.isDestroyed()) {
             // Execute JS to extract all localStorage/sessionStorage tokens
-            const storageType =
-              storageSources[0].type === "localStorage" ? "localStorage" : "sessionStorage";
+            const storageType = storageSources[0].type === "localStorage" ? "localStorage" : "sessionStorage";
             const keys = storageSources.map((s) => s.key);
             const js = `(() => {
               const res = {};
@@ -274,34 +272,13 @@ class LoginManager extends EventEmitter {
                 if (values && typeof values === "object") {
                   Object.assign(credentials, values);
                 }
-                this._checkCredentials(
-                  providerId,
-                  credentials,
-                  cookieSources,
-                  storageSources,
-                  poll,
-                  pollInterval
-                );
+                this._checkCredentials(providerId, credentials, cookieSources, storageSources, poll, pollInterval);
               })
               .catch(() => {
-                this._checkCredentials(
-                  providerId,
-                  credentials,
-                  cookieSources,
-                  storageSources,
-                  poll,
-                  pollInterval
-                );
+                this._checkCredentials(providerId, credentials, cookieSources, storageSources, poll, pollInterval);
               });
           } else {
-            this._checkCredentials(
-              providerId,
-              credentials,
-              cookieSources,
-              storageSources,
-              poll,
-              pollInterval
-            );
+            this._checkCredentials(providerId, credentials, cookieSources, storageSources, poll, pollInterval);
           }
         })
         .catch(() => {
@@ -322,19 +299,19 @@ class LoginManager extends EventEmitter {
     if (this.isCompleted) return;
 
     // Collect the required source names/keys
-    const requiredKeys = [...cookieSources.map((s) => s.name), ...storageSources.map((s) => s.key)];
+    const requiredKeys = [
+      ...cookieSources.map((s) => s.name),
+      ...storageSources.map((s) => s.key),
+    ];
     const foundKeys = Object.keys(credentials);
     const allFound = requiredKeys.every((k) => foundKeys.includes(k));
 
     if (allFound && foundKeys.length > 0) {
       // Success — all credentials extracted
-      this._completeLogin(
-        providerId,
-        foundKeys.reduce((acc, k) => {
-          acc[k] = credentials[k];
-          return acc;
-        }, {})
-      );
+      this._completeLogin(providerId, foundKeys.reduce((acc, k) => {
+        acc[k] = credentials[k];
+        return acc;
+      }, {}));
     } else if (!this.isCompleted) {
       // Continue polling using the configured interval
       this.pollIntervalId = setTimeout(poll, pollInterval);

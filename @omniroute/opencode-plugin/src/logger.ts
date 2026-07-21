@@ -58,13 +58,17 @@ export const logger = {
   child(tag: string) {
     return {
       error: (msg: string, ...args: unknown[]) =>
-        shouldLog(_level, "error") && console.error(fmt("error", msg, tag), ...args),
+        shouldLog(_level, "error") &&
+        console.error(fmt("error", msg, tag), ...args),
       warn: (msg: string, ...args: unknown[]) =>
-        shouldLog(_level, "warn") && console.warn(fmt("warn", msg, tag), ...args),
+        shouldLog(_level, "warn") &&
+        console.warn(fmt("warn", msg, tag), ...args),
       info: (msg: string, ...args: unknown[]) =>
-        shouldLog(_level, "info") && console.warn(fmt("info", msg, tag), ...args),
+        shouldLog(_level, "info") &&
+        console.warn(fmt("info", msg, tag), ...args),
       debug: (msg: string, ...args: unknown[]) =>
-        shouldLog(_level, "debug") && console.warn(fmt("debug", msg, tag), ...args),
+        shouldLog(_level, "debug") &&
+        console.warn(fmt("debug", msg, tag), ...args),
     };
   },
 };

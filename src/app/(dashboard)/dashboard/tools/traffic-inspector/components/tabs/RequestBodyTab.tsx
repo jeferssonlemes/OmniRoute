@@ -51,9 +51,7 @@ export function RequestBodyTab({ request }: RequestBodyTabProps) {
       </div>
       <div className="flex-1 overflow-auto bg-bg-subtle rounded border border-border p-2">
         {raw || !parsed ? (
-          <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-all">
-            {display}
-          </pre>
+          <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-all">{display}</pre>
         ) : (
           <JsonViewer data={parsed} />
         )}

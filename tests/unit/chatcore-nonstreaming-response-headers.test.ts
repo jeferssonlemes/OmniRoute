@@ -6,16 +6,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { buildNonStreamingResponseHeaders } =
-  await import("../../open-sse/handlers/chatCore/nonStreamingResponseHeaders.ts");
+const { buildNonStreamingResponseHeaders } = await import(
+  "../../open-sse/handlers/chatCore/nonStreamingResponseHeaders.ts"
+);
 
 function makeDeps(now = 1000) {
   const metaCalls: Array<{ headers: Record<string, string>; meta: Record<string, unknown> }> = [];
   const deps = {
-    attachOmniRouteMetaHeaders: (
-      headers: Record<string, string>,
-      meta: Record<string, unknown>
-    ) => {
+    attachOmniRouteMetaHeaders: (headers: Record<string, string>, meta: Record<string, unknown>) => {
       metaCalls.push({ headers, meta });
       headers["x-omniroute-meta"] = "attached";
     },
@@ -61,10 +59,7 @@ test("meta receives provider/model/cacheHit false/latency/usage/cost/requestId",
 
 test("no compression meta → no compression header", () => {
   const { deps } = makeDeps();
-  const h = buildNonStreamingResponseHeaders(
-    baseArgs({ compressionResponseMeta: undefined }),
-    deps
-  );
+  const h = buildNonStreamingResponseHeaders(baseArgs({ compressionResponseMeta: undefined }), deps);
   assert.ok(!Object.values(h).includes("engine:x"));
 });
 

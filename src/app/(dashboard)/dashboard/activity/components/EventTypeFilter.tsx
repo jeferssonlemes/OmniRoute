@@ -60,7 +60,11 @@ export default function EventTypeFilter({ value, onChange }: EventTypeFilterProp
   };
 
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by event type">
+    <div
+      className="flex flex-wrap gap-2"
+      role="group"
+      aria-label="Filter by event type"
+    >
       {CATEGORIES.map((cat) => (
         <button
           key={cat}

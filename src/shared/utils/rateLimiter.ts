@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import type Redis from "ioredis";
 
 // Redis is optional. When REDIS_URL is unset, use a process-local fallback
 // instead of probing localhost on every API request.
@@ -7,28 +7,87 @@ if (process.env.NODE_ENV === "production" && !REDIS_URL) {
   console.warn("[REDIS] REDIS_URL is not set in production. Using in-memory rate limiting.");
 }
 
-let redisClient: Redis | null = null;
+// #6559 — `ioredis` must stay a LAZY dependency here. This module is bundled
+// (via esbuild --packages=external) into the MCP server output, and esbuild
+// hoists any static top-level `import ... from "ioredis"` into a real
+// top-level ESM import in the compiled bundle — even though this module is
+// only ever reached through a dynamic `await import(...)` several call-sites
+// deep (apiKeys.ts -> mcpCallerIdentity.ts -> compressionTools.ts -> server.ts).
+// A static import forces Node to resolve `ioredis` at module-link time,
+// before any `--mcp` startup code runs, and `ioredis` is not guaranteed to
+// ship in the MCP-only bundle's node_modules. Mirrors the established
+// soft-dependency pattern in src/lib/quota/redisQuotaStore.ts.
+let redisClientPromise: Promise<Redis> | null = null;
 
 export function isRedisConfigured(): boolean {
   return REDIS_URL.length > 0;
 }
 
-export function getRedisClient() {
+/**
+ * State-change-gated log throttle for the Redis error handler.
+ *
+ * #4878: when REDIS_URL points at a non-running server, ioredis retries on a
+ * backoff and fires the "error" event on every attempt, flooding the logs with
+ * identical "[REDIS] Error:" lines. We only want to log when the error STATE
+ * actually changes (first occurrence, or a different error message), not on
+ * every retry of the same failure.
+ */
+export function createRedisLogThrottle() {
+  let lastLogged: string | null = null;
+  return {
+    shouldLog(message: string): boolean {
+      if (message === lastLogged) return false;
+      lastLogged = message;
+      return true;
+    },
+    reset(): void {
+      lastLogged = null;
+    },
+  };
+}
+
+const redisLogThrottle = createRedisLogThrottle();
+
+// Exposed for unit tests — returns a fresh, isolated throttle instance.
+export function _createRedisLogThrottleForTests() {
+  return createRedisLogThrottle();
+}
+
+/**
+ * Return the singleton Redis client, creating it (lazily importing `ioredis`)
+ * on first call. Throws SYNCHRONOUSLY (not a rejected Promise) when Redis is
+ * not configured — callers rely on this to fail fast without an `await`.
+ * Otherwise returns a Promise that resolves once the client is constructed.
+ */
+export function getRedisClient(): Promise<Redis> {
   if (!isRedisConfigured()) {
     throw new Error("Redis is not configured");
   }
 
-  if (!redisClient) {
-    redisClient = new Redis(REDIS_URL, {
-      maxRetriesPerRequest: 3,
-      enableReadyCheck: false,
-      retryStrategy(times) {
-        return Math.min(times * 50, 2000); // Exponential backoff
-      },
-    });
-    redisClient.on("error", (err) => console.error("[REDIS] Error:", err.message));
+  if (!redisClientPromise) {
+    redisClientPromise = (async () => {
+      // Lazy dynamic import — see the #6559 note above the singleton declaration.
+      const mod = await import("ioredis");
+      const RedisCtor = (mod.default ?? mod) as typeof Redis;
+      const client = new RedisCtor(REDIS_URL, {
+        maxRetriesPerRequest: 3,
+        enableReadyCheck: false,
+        retryStrategy(times) {
+          return Math.min(times * 50, 2000); // Exponential backoff
+        },
+      });
+      client.on("error", (err) => {
+        // Throttle: log once per error-state change instead of on every retry (#4878).
+        if (redisLogThrottle.shouldLog(err.message)) {
+          console.error("[REDIS] Error:", err.message);
+        }
+      });
+      // A successful connection resets the throttle so the next failure logs again.
+      client.on("ready", () => redisLogThrottle.reset());
+      return client;
+    })();
   }
-  return redisClient;
+  return redisClientPromise;
 }
 
 export interface RateLimitRule {
@@ -179,7 +238,7 @@ export async function checkRateLimit(
     return checkInMemoryRateLimit(FALLBACK_MEMORY_STORE, keyId, rules);
   }
 
-  const redis = getRedisClient();
+  const redis = await getRedisClient();
 
   const args: (string | number)[] = [Math.floor(Date.now() / 1000)];
 

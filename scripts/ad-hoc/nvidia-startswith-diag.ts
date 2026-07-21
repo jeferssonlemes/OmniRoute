@@ -19,8 +19,7 @@
  */
 
 const KEY = process.env.NVIDIA_API_KEY ?? "";
-const BASE_URL =
-  process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1/chat/completions";
+const BASE_URL = process.env.NVIDIA_BASE_URL || "https://integrate.api.nvidia.com/v1/chat/completions";
 const MODEL = process.env.NVIDIA_MODEL || "openai/gpt-oss-120b";
 
 // Neutralize CR/LF before logging so env-derived values (NVIDIA_MODEL, etc.)
@@ -53,13 +52,8 @@ async function partA() {
     });
     line("  ✅ validateProviderApiKey retornou (sem crash):");
     show("resultado", result);
-    if (
-      typeof (result as any)?.error === "string" &&
-      (result as any).error.includes("startsWith")
-    ) {
-      line(
-        "  ⚠️  A mensagem de erro contém 'startsWith' → crash CAPTURADO dentro do try/catch da validação."
-      );
+    if (typeof (result as any)?.error === "string" && (result as any).error.includes("startsWith")) {
+      line("  ⚠️  A mensagem de erro contém 'startsWith' → crash CAPTURADO dentro do try/catch da validação.");
     }
   } catch (err: any) {
     line("  ❌ validateProviderApiKey LANÇOU (crash não tratado):");

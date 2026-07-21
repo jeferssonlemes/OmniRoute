@@ -97,7 +97,11 @@ test("orderTargetsByHeadroom: saturation fetcher throwing fails open (keeps orde
   __setHeadroomSaturationFetcherForTests(async () => {
     throw new Error("boom");
   });
-  const ordered = await orderTargetsByHeadroom([target("c1"), target("c2")], "combo-x", silentLog);
+  const ordered = await orderTargetsByHeadroom(
+    [target("c1"), target("c2")],
+    "combo-x",
+    silentLog
+  );
   // Fail-open: the orderer catches and returns the original target order.
   assert.deepEqual(
     ordered.map((t) => t.connectionId),

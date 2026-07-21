@@ -39,7 +39,9 @@ export async function GET(request: Request, { params }: RouteParams): Promise<Re
       return NextResponse.json(buildErrorBody(404, "API key not found"), { status: 404 });
     }
 
-    const allowedQuotas: string[] = Array.isArray((key as Record<string, unknown>).allowedQuotas)
+    const allowedQuotas: string[] = Array.isArray(
+      (key as Record<string, unknown>).allowedQuotas,
+    )
       ? ((key as Record<string, unknown>).allowedQuotas as string[])
       : [];
 

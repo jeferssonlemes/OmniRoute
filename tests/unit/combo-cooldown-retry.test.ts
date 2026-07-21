@@ -22,11 +22,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const {
-  shouldWaitForComboCooldown,
-  resolveComboCooldownWaitDecision,
-  COMBO_COOLDOWN_WAIT_MARGIN_MS,
-} = await import("../../open-sse/services/combo/comboCooldownRetry.ts");
+const { shouldWaitForComboCooldown, resolveComboCooldownWaitDecision, COMBO_COOLDOWN_WAIT_MARGIN_MS } =
+  await import("../../open-sse/services/combo/comboCooldownRetry.ts");
 
 function baseSettings(overrides: Partial<Record<string, unknown>> = {}) {
   return {

@@ -71,7 +71,10 @@ export function SetupWizard({
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-border/30">
           <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[20px]" style={{ color: target.color }}>
+            <span
+              className="material-symbols-outlined text-[20px]"
+              style={{ color: target.color }}
+            >
               {target.icon}
             </span>
             <div>
@@ -112,7 +115,9 @@ export function SetupWizard({
               >
                 {s.label}
               </span>
-              {i < steps.length - 1 && <div className="flex-1 h-px bg-border/30 ml-1" />}
+              {i < steps.length - 1 && (
+                <div className="flex-1 h-px bg-border/30 ml-1" />
+              )}
             </div>
           ))}
         </div>
@@ -122,8 +127,7 @@ export function SetupWizard({
           {step === "verify" && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-text-muted">
-                {t("wizardStep1Desc") ||
-                  "Confirm the server is running and the certificate is installed."}
+                {t("wizardStep1Desc") || "Confirm the server is running and the certificate is installed."}
               </p>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center gap-2 text-sm">
@@ -176,8 +180,7 @@ export function SetupWizard({
           {step === "dns" && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-text-muted">
-                {t("wizardStep2Desc") ||
-                  "The following entries will be added to /etc/hosts to redirect traffic through AgentBridge:"}
+                {t("wizardStep2Desc") || "The following entries will be added to /etc/hosts to redirect traffic through AgentBridge:"}
               </p>
               <div className="rounded-lg bg-surface/50 border border-border/30 p-3 font-mono text-xs flex flex-col gap-1">
                 {target.hosts.map((host) => (
@@ -204,8 +207,7 @@ export function SetupWizard({
                 </p>
               </div>
               <p className="text-sm text-text-muted">
-                {t("wizardStep3Desc") ||
-                  "You can now configure model mappings in the agent card. Restart the IDE to apply changes."}
+                {t("wizardStep3Desc") || "You can now configure model mappings in the agent card. Restart the IDE to apply changes."}
               </p>
             </div>
           )}

@@ -243,7 +243,7 @@ export default function BuildWizard({
 
             <button
               onClick={onRun}
-              disabled={running || !prompt.trim()}
+              disabled={running || (!prompt.trim())}
               className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded bg-primary text-white hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <span className="material-symbols-outlined text-[14px]">play_arrow</span>
@@ -265,7 +265,9 @@ export default function BuildWizard({
           </div>
 
           {/* Result area (conversation + tool-call UI + validation badge) */}
-          <div className="flex-1 overflow-y-auto px-4 py-3">{result}</div>
+          <div className="flex-1 overflow-y-auto px-4 py-3">
+            {result}
+          </div>
 
           {/* Prompt input */}
           <div className="px-4 py-3 border-t border-border shrink-0">

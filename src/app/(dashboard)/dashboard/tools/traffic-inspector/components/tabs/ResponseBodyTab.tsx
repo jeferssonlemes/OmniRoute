@@ -54,9 +54,7 @@ export function ResponseBodyTab({ request }: ResponseBodyTabProps) {
         ) : isSSE && merged ? (
           <div className="space-y-2">
             {merged.text && (
-              <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-words">
-                {merged.text}
-              </pre>
+              <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-words">{merged.text}</pre>
             )}
             {merged.toolCalls && merged.toolCalls.length > 0 && (
               <JsonViewer data={merged.toolCalls} />
@@ -65,9 +63,7 @@ export function ResponseBodyTab({ request }: ResponseBodyTabProps) {
         ) : parsed ? (
           <JsonViewer data={parsed} />
         ) : (
-          <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-all">
-            {body}
-          </pre>
+          <pre className="text-xs font-mono text-text-main whitespace-pre-wrap break-all">{body}</pre>
         )}
       </div>
     </div>

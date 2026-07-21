@@ -20,7 +20,11 @@ interface PluginConfig {
   configSchema: Record<string, ConfigField>;
 }
 
-export default function PluginConfigPage({ params }: { params: Promise<{ name: string }> }) {
+export default function PluginConfigPage({
+  params,
+}: {
+  params: Promise<{ name: string }>;
+}) {
   const { name } = use(params);
   const { addNotification } = useNotificationStore();
   const t = useTranslations("plugins");
@@ -96,7 +100,9 @@ export default function PluginConfigPage({ params }: { params: Promise<{ name: s
                 <label className="text-sm font-medium">
                   {key}
                   {field.description && (
-                    <span className="ml-2 text-xs text-gray-500">{field.description}</span>
+                    <span className="ml-2 text-xs text-gray-500">
+                      {field.description}
+                    </span>
                   )}
                 </label>
                 {field.type === "boolean" ? (

@@ -38,9 +38,7 @@ export function TimingWaterfall({ request }: TimingWaterfallProps) {
             <div key={seg.label} className="space-y-1">
               <div className="flex justify-between text-xs text-text-muted">
                 <span>{seg.label}</span>
-                <span>
-                  {seg.ms}ms ({pct.toFixed(1)}%)
-                </span>
+                <span>{seg.ms}ms ({pct.toFixed(1)}%)</span>
               </div>
               <div className="h-4 w-full rounded bg-bg-subtle">
                 <div

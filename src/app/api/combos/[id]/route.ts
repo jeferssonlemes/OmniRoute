@@ -117,7 +117,19 @@ export async function PUT(request, { params }) {
     const { id } = await params;
     const validation = validateBody(updateComboSchema, rawBody);
     if (isValidationFailure(validation)) {
-      return comboErrorResponse("COMBO_002", 400, { issues: validation.error }, request);
+      // Surface the first field-level issue so clients can highlight the
+      // offending field without parsing the full issues array (#5083 Bug 3).
+      const firstDetail = validation.error.details?.[0] ?? null;
+      return comboErrorResponse(
+        "COMBO_002",
+        400,
+        {
+          issues: validation.error,
+          firstField: firstDetail?.field ?? null,
+          firstMessage: firstDetail?.message ?? null,
+        },
+        request
+      );
     }
     const currentCombo = (await getComboById(id)) as ComboRowShape | null;
     if (!currentCombo) {
@@ -137,17 +149,17 @@ export async function PUT(request, { params }) {
     const normalizedUpdate = { ...validation.data };
     if (normalizedUpdate.compressionOverride !== undefined) {
       const legacyCompressionOverride = normalizedUpdate.compressionOverride;
-      const nextConfig: Record<string, unknown> =
-        currentCombo.config &&
-        typeof currentCombo.config === "object" &&
-        !Array.isArray(currentCombo.config)
-          ? { ...(currentCombo.config as Record<string, unknown>) }
-          : {};
-      if (legacyCompressionOverride) {
-        nextConfig.compressionMode = legacyCompressionOverride;
-      } else {
-        delete nextConfig.compressionMode;
-      }
+    const nextConfig: Record<string, unknown> =
+      currentCombo.config &&
+      typeof currentCombo.config === "object" &&
+      !Array.isArray(currentCombo.config)
+        ? { ...(currentCombo.config as Record<string, unknown>) }
+        : {};
+    if (legacyCompressionOverride) {
+      nextConfig.compressionMode = legacyCompressionOverride;
+    } else {
+      delete nextConfig.compressionMode;
+    }
       normalizedUpdate.config = nextConfig;
       delete normalizedUpdate.compressionOverride;
     }
@@ -221,7 +233,12 @@ export async function PUT(request, { params }) {
               : dagError instanceof Error && /depth/i.test(dagError.message)
                 ? "max-depth-exceeded"
                 : "invalid-graph";
-          return comboErrorResponse("COMBO_005", 400, { comboName, reason }, request);
+          return comboErrorResponse(
+            "COMBO_005",
+            400,
+            { comboName, reason },
+            request
+          );
         }
       }
     }

@@ -12,6 +12,7 @@
 import { z } from "zod";
 import { PoolRegistry } from "../../services/sessionPool/poolRegistry.ts";
 import { getWebSessionPoolHealth } from "../../services/webSessionPoolHealth.ts";
+import { getBrowserPoolMetrics } from "../../services/browserPool.ts";
 
 // ─── Input Schemas ─────────────────────────────────────────────────────────
 
@@ -32,7 +33,13 @@ export const poolResetInput = z.object({
 
 export const poolWarmInput = z.object({
   provider: z.string().describe("Provider name (e.g. 'pollinations')"),
-  count: z.number().int().min(1).max(50).default(6).describe("Target session count (1–50)"),
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .max(50)
+    .default(6)
+    .describe("Target session count (1–50)"),
 });
 
 export const poolHealthInput = z.object({
@@ -48,7 +55,7 @@ export const poolHealthInput = z.object({
  * Handle pool_status tool: return stats for one or all pools
  */
 export async function handlePoolStatus(
-  args: z.infer<typeof poolStatusInput>
+  args: z.infer<typeof poolStatusInput>,
 ): Promise<Record<string, unknown>> {
   if (args.provider) {
     const stats = PoolRegistry.getStats(args.provider);
@@ -70,7 +77,7 @@ export async function handlePoolStatus(
  * Handle pool_sessions tool: list per-session details for a provider's pool
  */
 export async function handlePoolSessions(
-  args: z.infer<typeof poolSessionsInput>
+  args: z.infer<typeof poolSessionsInput>,
 ): Promise<Record<string, unknown>> {
   const details = PoolRegistry.getSessionDetails(args.provider);
   if (!details) {
@@ -90,7 +97,7 @@ export async function handlePoolSessions(
  * Handle pool_reset tool: shut down and recreate a pool
  */
 export async function handlePoolReset(
-  args: z.infer<typeof poolResetInput>
+  args: z.infer<typeof poolResetInput>,
 ): Promise<Record<string, unknown>> {
   const existed = PoolRegistry.resetPool(args.provider);
   return {
@@ -106,7 +113,7 @@ export async function handlePoolReset(
  * Handle pool_warm tool: warm up a pool to a target session count
  */
 export async function handlePoolWarm(
-  args: z.infer<typeof poolWarmInput>
+  args: z.infer<typeof poolWarmInput>,
 ): Promise<Record<string, unknown>> {
   // If pool doesn't exist yet, we can't warm it
   const pool = PoolRegistry.getPool(args.provider);
@@ -128,10 +135,20 @@ export async function handlePoolWarm(
 }
 
 export async function handlePoolHealth(
-  args: z.infer<typeof poolHealthInput>
+  args: z.infer<typeof poolHealthInput>,
 ): Promise<Record<string, unknown>> {
   const report = getWebSessionPoolHealth(args.provider);
   return report as unknown as Record<string, unknown>;
+}
+
+export const browserPoolStatusInput = z.object({});
+
+/**
+ * Handle browser_pool_status tool (#3368 PR7): return the stealth browser
+ * pool's live status plus cumulative lifecycle telemetry.
+ */
+export async function handleBrowserPoolStatus(): Promise<Record<string, unknown>> {
+  return getBrowserPoolMetrics();
 }
 
 // ─── Tool Registry ─────────────────────────────────────────────────────────
@@ -176,5 +193,13 @@ export const poolTools = {
     scopes: ["read:health"],
     inputSchema: poolHealthInput,
     handler: (args: z.infer<typeof poolHealthInput>) => handlePoolHealth(args),
+  },
+  omniroute_browser_pool_status: {
+    name: "omniroute_browser_pool_status",
+    description:
+      "Returns the stealth browser pool's live status (enabled, active contexts, browser running, stealth available, idle age) plus cumulative lifecycle telemetry: browser launches/failures, context create/reuse/evict/release counts, context-create failures, and shutdowns with the last reason.",
+    scopes: ["read:health"],
+    inputSchema: browserPoolStatusInput,
+    handler: () => handleBrowserPoolStatus(),
   },
 };

@@ -49,14 +49,6 @@ blob-report
 # (English) sources at runtime, so translations are not required in the
 # container image.
 docs/i18n/**
-# Note: SVG exports under docs/diagrams/exported/ and screenshots under
-# docs/screenshots/ are imported by Markdown pages via fumadocs-mdx
-# (architecture/AUTHZ/RESILIENCE/CODEBASE_DOCUMENTATION, routing/AUTO-COMBO,
-# frameworks/MCP-SERVER, frameworks/CLOUD_AGENT, guides/I18N, guides/FEATURES).
-# Excluding them breaks `next build` with "Module not found: Can't resolve
-# '../diagrams/exported/*.svg'" or "'../screenshots/*.png'".
-# Raster diagram excludes (.png/.jpg/...) stay because no Markdown
-# references them and they're heavier than the referenced screenshots.
 docs/diagrams/**/*.png
 docs/diagrams/**/*.jpg
 docs/diagrams/**/*.jpeg
@@ -85,6 +77,8 @@ bun.lock
 # Agent config
 .agents
 .gemini
+.claude
+.source
 
 # Misc
 llm.txt
@@ -131,3 +125,4 @@ app.__qa_backup/
 .worktrees
 .next-playwright/
 cloud/
+electron/dist-electron

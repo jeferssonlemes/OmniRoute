@@ -43,7 +43,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(result, { status: result.success ? 200 : 502 });
   } catch (err) {
-    return NextResponse.json({ error: sanitizeErrorMessage(err) }, { status: 500 });
+    return NextResponse.json(
+      { error: sanitizeErrorMessage(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -55,7 +58,10 @@ export async function GET(request: NextRequest) {
     const { getArenaEloSyncStatus } = await import("@/lib/arenaEloSync");
     return NextResponse.json(getArenaEloSyncStatus());
   } catch (err) {
-    return NextResponse.json({ error: sanitizeErrorMessage(err) }, { status: 500 });
+    return NextResponse.json(
+      { error: sanitizeErrorMessage(err) },
+      { status: 500 }
+    );
   }
 }
 
@@ -68,6 +74,9 @@ export async function DELETE(request: NextRequest) {
     clearSyncedIntelligence();
     return NextResponse.json({ success: true, message: "Synced intelligence data cleared" });
   } catch (err) {
-    return NextResponse.json({ error: sanitizeErrorMessage(err) }, { status: 500 });
+    return NextResponse.json(
+      { error: sanitizeErrorMessage(err) },
+      { status: 500 }
+    );
   }
 }

@@ -47,7 +47,10 @@ export async function POST(request: NextRequest) {
 
   const parsed = enableSchema.safeParse(rawBody);
   if (!parsed.success) {
-    return NextResponse.json(buildErrorBody(400, "Missing or invalid vaultPath"), { status: 400 });
+    return NextResponse.json(
+      buildErrorBody(400, "Missing or invalid vaultPath"),
+      { status: 400 }
+    );
   }
 
   const result = await enableObsidianVaultSync(parsed.data.vaultPath);

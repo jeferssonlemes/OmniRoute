@@ -52,7 +52,8 @@ export default function DestinationStep({
   const selectedEndpoint = destination?.endpoint ?? "/v1/chat/completions";
   const selectedModel = destination?.model ?? "";
 
-  const providerModels = batchProviders.find((p) => p.id === selectedProvider)?.models ?? [];
+  const providerModels =
+    batchProviders.find((p) => p.id === selectedProvider)?.models ?? [];
 
   function handleProviderChange(providerId: string) {
     if (!providerId) {

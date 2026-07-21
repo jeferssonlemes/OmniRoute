@@ -57,9 +57,7 @@ export function useAgentBridgeState({
   useEffect(() => {
     if (!pollingInterval || pollingInterval <= 0) return;
     const id = setInterval(() => {
-      refresh().catch(() => {
-        /* swallow background errors */
-      });
+      refresh().catch(() => {/* swallow background errors */});
     }, pollingInterval);
     return () => clearInterval(id);
   }, [pollingInterval, refresh]);

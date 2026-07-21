@@ -109,9 +109,7 @@ export function estimateBatchCost(input: {
     outputRate = price.output;
     pricingSource = price.src;
   } else {
-    warnings.push(
-      `model "${input.model}" not found in pricing table — cost shown as $0 (fallback)`
-    );
+    warnings.push(`model "${input.model}" not found in pricing table — cost shown as $0 (fallback)`);
   }
 
   // Rates are per 1 million tokens

@@ -23,7 +23,10 @@ import { sanitizeErrorMessage } from "@omniroute/open-sse/utils/error";
 const PROVIDER = "codex";
 
 // GET — validate the ticket so the public page can show "ready" vs "expired".
-export async function GET(_request: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ token: string }> }
+) {
   const { token } = await params;
   const ticket = peekDeviceFlowTicket(token);
   if (!ticket || ticket.provider !== PROVIDER || ticket.status !== "pending") {
@@ -40,7 +43,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ tok
 }
 
 // POST — the browser finished the device flow; consume the ticket and persist.
-export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ token: string }> }
+) {
   const { token } = await params;
 
   let rawBody: any;

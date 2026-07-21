@@ -51,10 +51,7 @@ export function resolveExecutionCredentials(opts: {
     providerSpecificData.apiType = "responses";
   }
 
-  if (
-    targetFormat === FORMATS.OPENAI_RESPONSES &&
-    (provider === "azure-ai" || provider === "oci")
-  ) {
+  if (targetFormat === FORMATS.OPENAI_RESPONSES && (provider === "azure-ai" || provider === "oci")) {
     providerSpecificData._omnirouteForceResponsesUpstream = true;
   }
 

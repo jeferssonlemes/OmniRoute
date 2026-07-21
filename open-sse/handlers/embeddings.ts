@@ -89,7 +89,7 @@ export async function handleEmbedding({
       enabled: detailedLoggingEnabled,
       captureStreamChunks,
       connectionId: connectionId || undefined,
-      model: model || (body.model as string),
+      model: model || body.model as string,
       provider: provider || undefined,
     }
   );

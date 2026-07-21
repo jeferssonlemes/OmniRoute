@@ -5,7 +5,7 @@
  * local-usage fallback, code-assist tier/plan mapping, credit-balance probing, the user-quota
  * + available-models fetchers (with their module-level caches), and getAntigravityUsage. The
  * 4 data caches + their proactive TTL-purge setInterval move here as a self-contained unit
- * (previously the purge timer was shared with the Gemini CLI cache in usage.ts; that timer was
+ * (previously the purge timer lived in usage.ts; that timer was
  * split so each module owns its own caches + cleanup). usage.ts imports getAntigravityUsage
  * (dispatcher) + getAntigravityPlanLabel/mapCodeAssist* (__testing). Behavior-preserving move.
  */
@@ -43,6 +43,7 @@ import {
 } from "../codeAssistSubscription.ts";
 import { toRecord, toNumber, getFieldValue } from "./scalars.ts";
 import { type UsageQuota, parseResetTime } from "./quota.ts";
+import { fetchAndParseAntigravityWeeklyQuotas } from "./antigravityWeeklyQuota.ts";
 
 type JsonRecord = Record<string, unknown>;
 type SubscriptionCacheEntry = {
@@ -604,9 +605,10 @@ export async function getAntigravityUsage(
       );
     }
 
-    const [data, userQuotaData] = await Promise.all([
+    const [data, userQuotaData, weeklyQuotas] = await Promise.all([
       fetchAntigravityAvailableModelsCached(accessToken, projectId, options),
       fetchAntigravityUserQuotaCached(accessToken, projectId, options),
+      fetchAndParseAntigravityWeeklyQuotas(accessToken, projectId, options), // #4017
     ]);
     const dataObj = toRecord(data);
     if (dataObj.__antigravityForbidden === true) {
@@ -717,6 +719,7 @@ export async function getAntigravityUsage(
       plan: getAntigravityPlanLabel(subscriptionInfo, providerSpecificData),
       quotas: {
         ...quotas,
+        ...weeklyQuotas,
         ...(creditBalance !== null && {
           credits: {
             used: 0,

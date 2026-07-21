@@ -19,10 +19,7 @@ interface ImprovePromptButtonProps {
  *
  * D8: uses the model configured in the Config pane (never overrides with cheap model).
  */
-export default function ImprovePromptButton({
-  configState,
-  setConfigState,
-}: ImprovePromptButtonProps) {
+export default function ImprovePromptButton({ configState, setConfigState }: ImprovePromptButtonProps) {
   const { loading, error, improve } = useImprovePrompt();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [improveError, setImproveError] = useState<string | null>(null);
@@ -76,7 +73,9 @@ export default function ImprovePromptButton({
           {loading ? "Improving…" : "Improve prompt"}
         </button>
 
-        {improveError && <p className="text-[11px] text-destructive">{improveError}</p>}
+        {improveError && (
+          <p className="text-[11px] text-destructive">{improveError}</p>
+        )}
       </div>
 
       {/* Quota confirmation modal */}
@@ -95,11 +94,13 @@ export default function ImprovePromptButton({
             <div className="flex items-start gap-3 mb-4">
               <span className="text-[24px] shrink-0">✨</span>
               <div>
-                <h3 className="text-sm font-semibold text-text-main mb-1">Improve prompt</h3>
+                <h3 className="text-sm font-semibold text-text-main mb-1">
+                  Improve prompt
+                </h3>
                 <p className="text-xs text-text-muted">
                   This will send your current system prompt to{" "}
-                  <code className="font-mono text-primary">{configState.model}</code> to generate an
-                  improved version.
+                  <code className="font-mono text-primary">{configState.model}</code>
+                  {" "}to generate an improved version.
                 </p>
                 <p className="text-xs text-text-muted mt-1.5 font-medium">
                   This action will consume model quota.

@@ -57,7 +57,10 @@ export function getLockfileLintConfig() {
  * @returns {string[]}
  */
 export function buildLockfileLintArgs(cfg) {
-  const args = ["--path", cfg.lockfilePath, "--type", cfg.type];
+  const args = [
+    "--path", cfg.lockfilePath,
+    "--type", cfg.type,
+  ];
   if (cfg.validateHttps) args.push("--validate-https");
   if (cfg.validateIntegrity) args.push("--validate-integrity");
   if (cfg.allowedHosts.length) {

@@ -13,7 +13,9 @@ export function EmptyStateNoProviders() {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/50 px-8 py-14 text-center gap-4">
       <div className="p-4 rounded-2xl bg-primary/10">
-        <span className="material-symbols-outlined text-[48px] text-primary">dns</span>
+        <span className="material-symbols-outlined text-[48px] text-primary">
+          dns
+        </span>
       </div>
       <div>
         <h3 className="text-base font-semibold text-text-main mb-1">

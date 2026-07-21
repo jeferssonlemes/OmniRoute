@@ -39,13 +39,7 @@ interface SearchFormProps extends SearchFormExtendedProps {
   providers: SearchProvider[];
 }
 
-export default function SearchForm({
-  onSearch,
-  loading,
-  onCancel,
-  providers,
-  catalogProviders,
-}: SearchFormProps) {
+export default function SearchForm({ onSearch, loading, onCancel, providers, catalogProviders }: SearchFormProps) {
   const t = useTranslations("search");
   const tc = useTranslations("common");
   const [query, setQuery] = useState("");
@@ -177,7 +171,10 @@ export default function SearchForm({
                       : "● missing"}
                 </span>
                 {catalogInfo.status === "missing" && (
-                  <Link href={catalogInfo.configureHref} className="text-accent hover:underline">
+                  <Link
+                    href={catalogInfo.configureHref}
+                    className="text-accent hover:underline"
+                  >
                     Configure →
                   </Link>
                 )}

@@ -8,7 +8,10 @@ const CONTENT_CAP_BYTES = 256 * 1024;
 
 // Lazy-load MarkdownMessage to avoid increasing initial bundle size
 const MarkdownMessage = lazy(
-  () => import("@/app/(dashboard)/dashboard/playground/components/MarkdownMessage")
+  () =>
+    import(
+      "@/app/(dashboard)/dashboard/playground/components/MarkdownMessage"
+    ),
 );
 
 interface ScrapeResultProps {
@@ -28,7 +31,9 @@ export default function ScrapeResult({ result, latencyMs }: ScrapeResultProps) {
 
   const contentSize = new TextEncoder().encode(result.content).length;
   const isTruncated = contentSize > CONTENT_CAP_BYTES;
-  const displayContent = isTruncated ? result.content.slice(0, CONTENT_CAP_BYTES) : result.content;
+  const displayContent = isTruncated
+    ? result.content.slice(0, CONTENT_CAP_BYTES)
+    : result.content;
 
   return (
     <div className="space-y-3" data-testid="scrape-result">
@@ -37,20 +42,24 @@ export default function ScrapeResult({ result, latencyMs }: ScrapeResultProps) {
         <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
           {result.provider && (
             <span>
-              Provider: <span className="font-medium text-text-main">{result.provider}</span>
+              Provider:{" "}
+              <span className="font-medium text-text-main">{result.provider}</span>
             </span>
           )}
           {latencyMs != null && (
             <span>
-              Latência: <span className="font-medium text-text-main">{latencyMs}ms</span>
+              Latência:{" "}
+              <span className="font-medium text-text-main">{latencyMs}ms</span>
             </span>
           )}
           <span>
-            Tamanho: <span className="font-medium text-text-main">{formatBytes(contentSize)}</span>
+            Tamanho:{" "}
+            <span className="font-medium text-text-main">{formatBytes(contentSize)}</span>
           </span>
           {result.links.length > 0 && (
             <span>
-              Links: <span className="font-medium text-text-main">{result.links.length}</span>
+              Links:{" "}
+              <span className="font-medium text-text-main">{result.links.length}</span>
             </span>
           )}
         </div>
@@ -110,7 +119,9 @@ export default function ScrapeResult({ result, latencyMs }: ScrapeResultProps) {
           className="flex items-center justify-between p-3 bg-warning/10 border border-warning/30 rounded-lg text-xs text-warning"
           data-testid="truncation-warning"
         >
-          <span>Conteúdo truncado a 256 KB (tamanho original: {formatBytes(contentSize)})</span>
+          <span>
+            Conteúdo truncado a 256 KB (tamanho original: {formatBytes(contentSize)})
+          </span>
           <button
             className="ml-3 text-xs px-2 py-1 rounded bg-warning/20 text-warning hover:bg-warning/30 transition-colors"
             onClick={() => setRawModalOpen(true)}

@@ -134,6 +134,7 @@ export async function GET() {
         maxRetryWaitSec: resilience.waitForCooldown.maxRetryWaitSec,
       },
       comboCooldownWait: resilience.comboCooldownWait,
+      quotaShareConcurrencyLimit: resilience.quotaShareConcurrencyLimit,
       providerCooldown: resilience.providerCooldown,
       legacy: buildLegacyResilienceCompat(resilience),
     });
@@ -196,6 +197,12 @@ export async function PATCH(request) {
               body.comboCooldownWait as ResilienceSettingsPatch["comboCooldownWait"],
           }
         : {}),
+      ...(body.quotaShareConcurrencyLimit
+        ? {
+            quotaShareConcurrencyLimit:
+              body.quotaShareConcurrencyLimit as ResilienceSettingsPatch["quotaShareConcurrencyLimit"],
+          }
+        : {}),
       ...(body.providerCooldown
         ? {
             providerCooldown: body.providerCooldown as ResilienceSettingsPatch["providerCooldown"],
@@ -236,6 +243,7 @@ export async function PATCH(request) {
         maxRetryWaitSec: nextResilience.waitForCooldown.maxRetryWaitSec,
       },
       comboCooldownWait: nextResilience.comboCooldownWait,
+      quotaShareConcurrencyLimit: nextResilience.quotaShareConcurrencyLimit,
       providerCooldown: nextResilience.providerCooldown,
       legacy: buildLegacyResilienceCompat(nextResilience),
     });

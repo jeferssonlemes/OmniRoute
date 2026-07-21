@@ -100,7 +100,9 @@ export function TrafficInspectorPageClient() {
       {filters.sessionId !== undefined && (
         <div className="shrink-0 px-4 pb-2">
           <HistoricSessionBanner
-            sessionName={recorder.sessions.find((s) => s.id === filters.sessionId)?.name ?? null}
+            sessionName={
+              recorder.sessions.find((s) => s.id === filters.sessionId)?.name ?? null
+            }
             onBackToLive={() => setSessionId(undefined)}
           />
         </div>
@@ -176,10 +178,7 @@ export function TrafficInspectorPageClient() {
 
           {collapsed && (
             <div className="flex-1 flex items-start justify-center pt-4">
-              <span
-                className="text-xs text-text-muted font-mono"
-                style={{ writingMode: "vertical-rl" }}
-              >
+              <span className="text-xs text-text-muted font-mono" style={{ writingMode: "vertical-rl" }}>
                 {streamState.total} reqs
               </span>
             </div>

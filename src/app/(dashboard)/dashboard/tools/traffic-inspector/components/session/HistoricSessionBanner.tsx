@@ -16,7 +16,8 @@ export function HistoricSessionBanner({ sessionName, onBackToLive }: HistoricSes
           history
         </span>
         <span>
-          {t("viewingRecordedSession")} — <strong>{sessionName ?? t("untitledSession")}</strong>
+          {t("viewingRecordedSession")} —{" "}
+          <strong>{sessionName ?? t("untitledSession")}</strong>
         </span>
       </div>
       <button

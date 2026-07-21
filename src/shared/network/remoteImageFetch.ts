@@ -45,7 +45,8 @@ function validateRemoteImageUrl(input: string | URL, guard: OutboundUrlGuardMode
   return guard === "public-only" ? parseAndValidatePublicUrl(input) : parseOutboundUrl(input);
 }
 
-const defaultLookup: RemoteImageLookup = (hostname) => dns.promises.lookup(hostname, { all: true });
+const defaultLookup: RemoteImageLookup = (hostname) =>
+  dns.promises.lookup(hostname, { all: true });
 
 /**
  * Defence against DNS-rebinding SSRF (GHSA-cmhj-wh2f-9cgx). The

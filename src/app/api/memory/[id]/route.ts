@@ -49,7 +49,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
   } catch {
     return NextResponse.json(
       { error: { message: "Invalid JSON body", details: [] } },
-      { status: 400 }
+      { status: 400 },
     );
   }
 

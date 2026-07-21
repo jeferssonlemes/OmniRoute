@@ -3,11 +3,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-const { isBuiltinStackedPipeline, isStackedCompressionCombo } =
-  await import("../../open-sse/handlers/chatCore/compressionComboPredicates.ts");
+const { isBuiltinStackedPipeline, isStackedCompressionCombo } = await import(
+  "../../open-sse/handlers/chatCore/compressionComboPredicates.ts"
+);
 
 test("isBuiltinStackedPipeline true only for the rtk(standard)→caveman(full) shape", () => {
-  assert.equal(isBuiltinStackedPipeline([{ engine: "rtk" }, { engine: "caveman" }] as never), true);
+  assert.equal(
+    isBuiltinStackedPipeline([{ engine: "rtk" }, { engine: "caveman" }] as never),
+    true
+  );
   assert.equal(
     isBuiltinStackedPipeline([
       { engine: "rtk", intensity: "standard" },
@@ -33,7 +37,10 @@ test("isBuiltinStackedPipeline false for wrong length / engines / intensities / 
     false
   );
   assert.equal(
-    isBuiltinStackedPipeline([{ engine: "rtk", config: { x: 1 } }, { engine: "caveman" }] as never),
+    isBuiltinStackedPipeline([
+      { engine: "rtk", config: { x: 1 } },
+      { engine: "caveman" },
+    ] as never),
     false
   );
 });
@@ -41,13 +48,7 @@ test("isBuiltinStackedPipeline false for wrong length / engines / intensities / 
 test("isStackedCompressionCombo true when the combo has >= 1 pipeline layer", () => {
   assert.equal(isStackedCompressionCombo(null), false);
   assert.equal(
-    isStackedCompressionCombo({
-      id: "c",
-      pipeline: [],
-      languagePacks: [],
-      outputMode: false,
-      outputModeIntensity: "full",
-    } as never),
+    isStackedCompressionCombo({ id: "c", pipeline: [], languagePacks: [], outputMode: false, outputModeIntensity: "full" } as never),
     false
   );
   assert.equal(

@@ -22,8 +22,7 @@ export function estimateSizeFast(value: unknown): number {
         for (let i = 0; i < v.length; i++) stack.push(v[i]);
       } else {
         for (const key in v) {
-          if (Object.prototype.hasOwnProperty.call(v, key))
-            stack.push((v as Record<string, unknown>)[key]);
+          if (Object.prototype.hasOwnProperty.call(v, key)) stack.push((v as Record<string, unknown>)[key]);
         }
       }
     }

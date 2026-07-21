@@ -43,7 +43,11 @@ export default function RerankConfigCard({ settings, providers, onSave, saving }
           }}
           disabled={saving || (!rerankEnabled && !hasProvider)}
           aria-disabled={saving || (!rerankEnabled && !hasProvider)}
-          title={!rerankEnabled && !hasProvider ? t("rerank.noProviderWithKey") : undefined}
+          title={
+            !rerankEnabled && !hasProvider
+              ? t("rerank.noProviderWithKey")
+              : undefined
+          }
           role="switch"
           aria-checked={rerankEnabled}
           className={`relative w-11 h-6 rounded-full transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -92,7 +96,7 @@ export default function RerankConfigCard({ settings, providers, onSave, saving }
                     <option key={m.id} value={m.id}>
                       {m.name}
                     </option>
-                  ))
+                  )),
                 )}
               </select>
             )}

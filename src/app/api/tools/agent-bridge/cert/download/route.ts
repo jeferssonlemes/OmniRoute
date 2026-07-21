@@ -14,8 +14,7 @@ export async function GET(): Promise<Response> {
   if (!fs.existsSync(crtPath)) {
     return createErrorResponse({
       status: 404,
-      message:
-        "Certificate not found. Generate one first via POST /api/tools/agent-bridge/cert/regenerate",
+      message: "Certificate not found. Generate one first via POST /api/tools/agent-bridge/cert/regenerate",
     });
   }
 

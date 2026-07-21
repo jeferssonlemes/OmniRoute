@@ -14,8 +14,9 @@ process.env.DATA_DIR = testDataDir;
 
 const coreDb = await import("../../src/lib/db/core.ts");
 const { getUsageHistory } = await import("../../src/lib/usage/usageHistory.ts");
-const { recordNonStreamingUsageStats } =
-  await import("../../open-sse/handlers/chatCore/nonStreamingUsageStats.ts");
+const { recordNonStreamingUsageStats } = await import(
+  "../../open-sse/handlers/chatCore/nonStreamingUsageStats.ts"
+);
 
 function baseCtx(overrides: Record<string, unknown> = {}) {
   return {

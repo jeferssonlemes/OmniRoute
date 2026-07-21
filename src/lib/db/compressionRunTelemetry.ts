@@ -114,7 +114,8 @@ export function getCompressionRunTelemetrySummary(): CompressionRunTelemetrySumm
       try {
         const styles = JSON.parse(row.output_styles) as Array<{ id: string }>;
         for (const style of styles) {
-          summary.appliedStyleCounts[style.id] = (summary.appliedStyleCounts[style.id] ?? 0) + 1;
+          summary.appliedStyleCounts[style.id] =
+            (summary.appliedStyleCounts[style.id] ?? 0) + 1;
         }
       } catch {
         // ignore a corrupt JSON cell

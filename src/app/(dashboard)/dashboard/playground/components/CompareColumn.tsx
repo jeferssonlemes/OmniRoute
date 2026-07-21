@@ -48,7 +48,10 @@ export default function CompareColumn({ column, onCancel, onRemove }: CompareCol
             }`}
             aria-label={`Status: ${status}`}
           />
-          <span className="text-xs font-medium text-text-main truncate" title={model}>
+          <span
+            className="text-xs font-medium text-text-main truncate"
+            title={model}
+          >
             {model || <span className="text-text-muted italic">No model</span>}
           </span>
         </div>
@@ -83,7 +86,11 @@ export default function CompareColumn({ column, onCancel, onRemove }: CompareCol
 
       {/* Response content */}
       <div className="flex-1 overflow-y-auto px-3 py-3 text-sm">
-        {status === "idle" && <p className="text-text-muted text-xs italic">Ready to run.</p>}
+        {status === "idle" && (
+          <p className="text-text-muted text-xs italic">
+            Ready to run.
+          </p>
+        )}
 
         {status === "error" && (
           <div className="text-destructive text-xs bg-destructive/10 rounded p-2">
