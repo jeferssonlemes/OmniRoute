@@ -6,8 +6,10 @@ import { v4 as uuidv4 } from "uuid";
 import { getDbInstance } from "./core";
 import { backupDbFile } from "./backup";
 import { invalidateDbCache } from "./readCache";
+import { invalidateReasoningRoutingRuleCache } from "./reasoningRoutingRules";
 import { normalizeComboRecord } from "@/lib/combos/steps";
 import { clearSessionModelHistoryForCombo } from "./contextHandoffs";
+import { validateComboInvariant } from "@/lib/combos/invariants";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -91,13 +93,18 @@ function getNextSortOrder() {
   return (sortOrder ?? 0) + 1;
 }
 
-export async function getCombos() {
+export async function getCombos(limit?: number, offset?: number) {
   const db = getDbInstance();
+  let sql =
+    "SELECT data, sort_order, context_cache_protection FROM combos ORDER BY sort_order ASC, name COLLATE NOCASE ASC";
+  const params: unknown[] = [];
+  if (limit !== undefined) {
+    sql += " LIMIT ? OFFSET ?";
+    params.push(limit, offset ?? 0);
+  }
   const rawCombos = db
-    .prepare(
-      "SELECT data, sort_order, context_cache_protection FROM combos ORDER BY sort_order ASC, name COLLATE NOCASE ASC"
-    )
-    .all()
+    .prepare(sql)
+    .all(...params)
     .map((row) => parseComboRow(row))
     .filter((row): row is JsonRecord => row !== null);
 
@@ -110,6 +117,12 @@ export async function getCombos() {
       allCombos: comboNames,
     })
   );
+}
+
+export function getCombosCount(): number {
+  const db = getDbInstance();
+  const row = db.prepare("SELECT count(*) as cnt FROM combos").get() as { cnt: number };
+  return row.cnt;
 }
 
 export async function getComboById(id: string) {
@@ -172,6 +185,7 @@ export async function createCombo(data: JsonRecord) {
     typeof data.name === "string" ? [data.name] : []
   );
 
+  validateComboInvariant(combo);
   const contextCache = data.context_cache_protection ? 1 : 0;
   db.prepare(
     "INSERT INTO combos (id, name, data, sort_order, created_at, updated_at, context_cache_protection) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -215,6 +229,12 @@ export async function updateCombo(id: string, data: JsonRecord) {
       ? merged["name"]
       : currentName;
   const normalizedMerged = normalizeStoredCombo({ ...merged, name: nextName }, db, [nextName]);
+  validateComboInvariant({
+    ...normalizedMerged,
+    ...data,
+    name: nextName,
+    models: normalizedMerged.models,
+  });
   const contextCacheProtection = normalizedMerged.context_cache_protection ? 1 : 0;
 
   db.prepare(
@@ -322,6 +342,7 @@ export async function deleteCombo(id: string) {
   const result = db.prepare("DELETE FROM combos WHERE id = ?").run(id);
   if (result.changes === 0) return false;
   invalidateDbCache("combos");
+  invalidateReasoningRoutingRuleCache();
   backupDbFile("pre-write");
   return true;
 }
