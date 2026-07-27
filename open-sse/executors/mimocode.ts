@@ -90,6 +90,7 @@ export interface AccountProxyConfig {
     port: number;
     username?: string;
     password?: string;
+    relayAuth?: string;
   } | null;
 }
 
@@ -99,6 +100,12 @@ interface AccountState {
   expiresAt: number;
   cooldownUntil: number;
   consecutiveFails: number;
+  /**
+   * #3837/#5521: the account's resolved proxy, or `null` when none is configured.
+   * Always present (never `undefined`) so callers can read `acct.proxy` directly —
+   * syncAccountsFromCredentials() writes it on every account on every sync.
+   */
+  proxy: AccountProxyConfig["proxy"];
 }
 
 function parseJwtExp(jwt: string): number {

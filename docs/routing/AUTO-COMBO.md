@@ -76,6 +76,34 @@ model: "auto/cheap"           # cheapest per token
 - ✅ **Multi-account aware:** Each provider connection becomes a separate candidate
 - ✅ **No DB writes:** Virtual combo exists only for the request, zero persistence overhead
 
+### Per-key candidate control (#7819, Level 1+2)
+
+`GET /v1/auto-combo/{channel}/candidates` (`{channel}` = the suffix after `auto/`, or
+the literal `auto` for the base channel) is a **read-only** endpoint that lists an
+`auto/*` channel's current candidate pool decorated with live reachability, reusing
+the existing resilience reads (never raw breaker `state`):
+
+- provider circuit breaker — `getCircuitBreaker(provider).getStatus()` / `.canExecute()`
+- connection cooldown — `rateLimitedUntil` / `testStatus` on the resolved
+  `provider_connections` row
+- model lockout — `isModelLocked(provider, connectionId, model)`
+
+Each candidate also carries this API key's `excluded` flag. Exclusions are stored
+per-API-key (`auto_candidate_overrides` table, migration `128`) — OmniRoute is
+single-tenant with no `users` table, so `apiKeyId` is the closest real per-caller
+identity — and enforced at the candidate-pool chokepoint in
+`open-sse/services/autoCombo/virtualFactory.ts` via the pure, unit-tested
+`filterExcludedCandidates()` (`open-sse/services/autoCombo/candidateOverrides.ts`).
+The filter is **fail-open**: an unset apiKeyId/channel or a DB lookup failure both
+leave the pool unfiltered, so an operator with no overrides configured sees routing
+byte-identical to before this feature.
+
+**Deferred to a follow-up issue:** per-candidate weights + explicit ordering (Level 3
+— feeds into the existing weighted/priority strategy paths) and pinning a specific
+`combo.ts` strategy per `auto/*` channel (Level 4). See the #7819 plan for the open
+question on whether overrides should stay per-API-key or become global given the
+single-tenant model.
+
 **Behind the scenes:**
 
 ```txt
@@ -99,6 +127,37 @@ Auto-scoring selects best provider/model per request
 | `open-sse/services/autoCombo/providerRegistryAccessor.ts` | Test hook for mocking provider registry   |
 | `src/sse/handlers/chat.ts`                                | Integration: auto prefix short-circuit    |
 | `src/shared/constants/providers.ts`                       | `SYSTEM_PROVIDERS.auto` system entry      |
+
+## Combo Names That Match a Real Model Id
+
+A combo whose `name` is identical to a bare model id (e.g. a combo named
+`gpt-5.5`) is an **intentional, supported pattern**, not a bug: it is the
+mechanism for per-model-id provider fallback documented in
+[#6940](https://github.com/diegosouzapw/OmniRoute/issues/6940). Because combo
+resolution is checked before bare-model-id resolution
+(`getComboForModel()` in `src/sse/services/model.ts`), a request for the bare
+id `gpt-5.5` is routed through the combo's targets (e.g.
+`acme-responses/gpt-5.5`, `backup-responses/gpt-5.5`) instead of straight to
+a single provider — this reuses the combo-before-rewrite precedence built for
+[#3227/#3233](https://github.com/diegosouzapw/OmniRoute/issues/3227) and is
+regression-tested by `tests/unit/responses-combo-resolution-3227.test.ts` and
+`tests/unit/combo-name-codex-responses-rewrite.test.ts`.
+
+Creating or renaming a combo to a name that shadows a real model id is
+**never rejected** — doing so would break this documented workflow. Instead
+(#8530), `POST /api/combos` and `PUT /api/combos/[id]` attach a non-blocking
+`warning` field to the response when the (new) name collides with a real
+model id:
+
+```json
+{ "warning": { "code": "COMBO_NAME_SHADOWS_MODEL", "modelId": "gpt-5.5", "providerId": "openai" } }
+```
+
+At boot, `scanComboModelNameCollisionsAtBoot()`
+(`src/instrumentation-node.ts`) also logs a one-line `[STARTUP]` warning
+enumerating every existing combo that shadows a model id, so operators who
+hit this by accident (rather than intentionally, per #6940) have a signal.
+The detection helper lives in `src/lib/combos/modelNameCollision.ts`.
 
 ## How It Works (Persisted Auto-Combos)
 
@@ -212,8 +271,15 @@ a single final answer from all panel responses. Ported from upstream `decolua/9r
 
 How it works:
 
-1. **Fan-out** — the prompt is sent to every panel model at once, forced non-streaming
-   with tools stripped (the judge needs complete prose to synthesize).
+0. **Tool-bearing bypass** — a request that carries a non-empty `tools` array with
+   `tool_choice` not explicitly `"none"` skips the panel entirely: it routes directly to
+   a single model (the configured judge, or `panel[0]`) with `tools`/`tool_choice`
+   passed through unmodified. Panel members have no tool access and the judge's
+   synthesis directive discourages tool-call emission, so agentic/tool-calling clients
+   get a real tool-call decision instead of synthesized prose (#6771).
+1. **Fan-out** (non-tool-bearing requests only) — the prompt is sent to every panel
+   model at once, forced non-streaming with tools stripped (the judge needs complete
+   prose to synthesize).
 2. **Quorum-grace collection** — as soon as `minPanel` answers arrive, a short grace
    timer starts for the stragglers, then fusion proceeds with whatever was collected.
    This caps the slowest model's penalty on wall time, bounded by a hard timeout.
@@ -224,6 +290,11 @@ How it works:
    `stream` flag + tools, so streaming and downstream tool use still work.
 4. **Graceful degradation** — 0 panel answers → `503`; exactly 1 survivor → that answer
    is returned directly (nothing to fuse); a single-model panel answers directly.
+
+A panel member may also be a `combo-ref` step (`{kind: "combo-ref", comboName: "..."}`) referencing
+another combo — it resolves as **one black-box panel voice** (a full recursive dispatch into the
+referenced combo, not a fan-out of that combo's own targets), with the same depth/cycle protection
+every other combo-ref-consuming strategy already uses (#6764).
 
 ### Configuration
 
