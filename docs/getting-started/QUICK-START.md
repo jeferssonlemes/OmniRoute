@@ -1,3 +1,9 @@
+---
+title: "Quick Start: Get OmniRoute Running in 3 Minutes"
+version: 3.8.50
+lastUpdated: 2026-08-06
+---
+
 # Quick Start: Get OmniRoute Running in 3 Minutes
 
 > **TL;DR**: Install → Connect a free provider → Point your IDE to OmniRoute. Done.
@@ -134,6 +140,8 @@ omniroute launch-codex --model auto
 
 You can do this manually via `codex` and command line parameters to specify endpoint and api key, but with the above command, OmniRoute takes care of everything for you.
 
+The same one-command launch works for other CLIs via the generic launcher — `omniroute run <target>` supports `claude`, `codex`, `aider`, `goose`, `opencode`, `qwen`, and `gemini` (see [CLI Integrations](../guides/CLI-INTEGRATIONS.md)).
+
 3. The CLI should be sending requests to OmniRoute now.
 
 ### Confirm your tool is routing to OmniRoute
@@ -147,7 +155,7 @@ You can see the details of the request by clicking [Monitoring/Logs](http://loca
 - **[Auto-Combo Guide](./AUTO-COMBO-GUIDE.md)** — Let OmniRoute pick the best AI for you
 - **[Providers Guide](./PROVIDERS-GUIDE.md)** — Connect more providers (free and paid)
 - **[Free Tiers Guide](./FREE-TIERS-GUIDE.md)** — Get free AI with no credit card
-- **[Troubleshooting](./TROUBLESHOOTING.md)** — Fix common issues
+- **[Troubleshooting](../guides/TROUBLESHOOTING.md)** — Fix common issues
 
 ---
 
@@ -177,6 +185,6 @@ OmniRoute automatically skips failed providers and tries the next one. You don't
 
 ## Need Help?
 
-- **[Troubleshooting](./TROUBLESHOOTING.md)** — Common issues and fixes
+- **[Troubleshooting](../guides/TROUBLESHOOTING.md)** — Common issues and fixes
 - **[Discord](https://discord.gg/U47eFqAXCn)** — Community support
 - **[GitHub Issues](https://github.com/diegosouzapw/OmniRoute/issues)** — Report bugs

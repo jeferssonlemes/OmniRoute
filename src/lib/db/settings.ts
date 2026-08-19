@@ -90,6 +90,35 @@ function withFamilyDefault(value: ProxyValue): ProxyValue {
 
 // ──────────────── Settings ────────────────
 
+/** Internal key_value row — not exposed as a user-facing settings field. */
+export const SETTINGS_REVISION_KEY = "_settingsRevision";
+
+export class SettingsRevisionConflictError extends Error {
+  readonly code = "SETTINGS_REVISION_CONFLICT" as const;
+
+  constructor(public readonly currentRevision: number) {
+    super("Settings revision mismatch");
+    this.name = "SettingsRevisionConflictError";
+  }
+}
+
+function readSettingsRevision(db: ReturnType<typeof getDbInstance>): number {
+  const row = db
+    .prepare("SELECT value FROM key_value WHERE namespace = 'settings' AND key = ?")
+    .get(SETTINGS_REVISION_KEY) as { value?: string } | undefined;
+  if (!row?.value) return 0;
+  try {
+    const parsed = JSON.parse(row.value) as unknown;
+    return typeof parsed === "number" && Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function getSettingsRevision(): Promise<number> {
+  return readSettingsRevision(getDbInstance());
+}
+
 /**
  * #7274: read-fallback for the codexSessionAffinityTtlMs -> sessionAffinityTtlMs
  * rename. Migration 124 already backfills the new key from any pre-existing
@@ -124,7 +153,7 @@ export async function getSettings() {
     providerStrategies: {},
     // Per-operator quota row visibility (dashboard usage tab). Keyed by
     // provider id → { hidden: [<quota visibility key>] }. Independent of the
-    // model catalog's isHidden/isDeleted flags (collectHiddenQuotaModelIds in
+    // model catalog's isHidden flag (collectHiddenQuotaModelIds in
     // ProviderLimits/utils.tsx) — this is a personal view preference, not an
     // admin model-catalog edit. Ported from upstream decolua/9router#2371.
     quotaVisibility: {},
@@ -183,7 +212,9 @@ export async function getSettings() {
     idempotencyWindowMs: 5000,
     wsAuth: false,
     maxBodySizeMb: requestBodyLimitMbFromEnv(process.env.MAX_BODY_SIZE_BYTES),
-    debugMode: true,
+    // #10312: opt-in only — a fresh install (or one missing the persisted key)
+    // must not run in debug mode; installs that persisted `true` keep it.
+    debugMode: false,
     // Opt-in diagnostic: when true, the chat handler emits a `log.debug("TOOLS", …)`
     // line per request summarizing tool count + MCP/hosted/client source breakdown.
     logToolSources: false,
@@ -196,6 +227,7 @@ export async function getSettings() {
     localOnlyManageScopeBypassEnabled: true,
     localOnlyManageScopeBypassPrefixes: ["/api/mcp/"],
     customBannedSignals: [],
+    autoDisableBannedScope: "all",
     proxyEnabled: true,
     perKeyProxyEnabled: false,
     customSystemPromptEnabled: false,
@@ -205,6 +237,12 @@ export async function getSettings() {
     // (`:free` suffix, zero-price pricing, or FREE_MODEL_BUDGETS membership). Default
     // false preserves prior behaviour; opt-in only.
     hidePaidModels: false,
+    // #9418: Opt-in filter that hides auto/* virtual combos from the /v1/models catalog.
+    // User-defined combos are unaffected; routing still works for hidden ids sent explicitly.
+    hideAutoCombos: false,
+    // #9418: Opt-in filter that hides no-think/* gateway variants from the /v1/models catalog.
+    // Routing still works for hidden ids sent explicitly.
+    hideNoThinkVariants: false,
     // #6977: Opt-in per-connection auto-ping that warms a Codex OAuth connection's
     // quota window right after it resets, so the first real request doesn't land in
     // a cold window. `connections` maps connection id -> enabled. Default empty map
@@ -212,12 +250,14 @@ export async function getSettings() {
     // connection on, since pinging burns a small amount of real quota (Hard Rule #20
     // spirit: never mutate/consume on the operator's behalf by default).
     codexAutoPing: { connections: {} },
+    // #8848: opt-in per-connection Claude proactive warmup (empty = off for everyone).
+    claudeWarmup: { connections: {} },
   };
   for (const row of rows) {
     const record = toRecord(row);
     const key = typeof record.key === "string" ? record.key : null;
     const rawValue = typeof record.value === "string" ? record.value : null;
-    if (!key || rawValue === null) continue;
+    if (!key || rawValue === null || key.startsWith("_")) continue;
     try {
       settings[key] = JSON.parse(rawValue);
     } catch {
@@ -246,7 +286,10 @@ export async function getSettings() {
   return settings;
 }
 
-export async function updateSettings(updates: Record<string, unknown>) {
+export async function updateSettings(
+  updates: Record<string, unknown>,
+  options?: { expectedRevision?: number }
+) {
   // Detect first-time setup completion before we overwrite settings.
   let setupJustCompleted = false;
   if (updates.setupComplete === true) {
@@ -263,10 +306,15 @@ export async function updateSettings(updates: Record<string, unknown>) {
     "INSERT OR REPLACE INTO key_value (namespace, key, value) VALUES ('settings', ?, ?)"
   );
   const tx = db.transaction(() => {
+    const currentRevision = readSettingsRevision(db);
+    if (options?.expectedRevision !== undefined && options.expectedRevision !== currentRevision) {
+      throw new SettingsRevisionConflictError(currentRevision);
+    }
     for (const [key, value] of Object.entries(updates)) {
       const toStore = key === "oidcClientSecret" ? encrypt(value as string) : value;
       insert.run(key, JSON.stringify(toStore));
     }
+    insert.run(SETTINGS_REVISION_KEY, JSON.stringify(currentRevision + 1));
   });
   tx();
   backupDbFile("pre-write");
@@ -770,7 +818,14 @@ export {
   resetAllPricing,
 } from "./settings/pricing";
 
-export { type LKGPRecord, getLKGP, setLKGP, clearAllLKGP } from "./settings/lkgp";
+export {
+  type LKGPRecord,
+  getLKGP,
+  setLKGP,
+  clearAllLKGP,
+  clearLKGP,
+  deleteLKGPByConnectionIds,
+} from "./settings/lkgp";
 
 export {
   type CacheTrendPoint,

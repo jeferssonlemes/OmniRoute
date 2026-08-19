@@ -216,7 +216,12 @@ function resolveModelPricing(
     }
   }
 
-  // Last resort fallback for historical usage (e.g. "gpt-4" missing, matches "gpt-4.1" or first available)
+  // Short-circuit :free models to $0 (they have no pricing entry → should not fall back to arbitrary rates)
+  if (!pricing && model.endsWith(":free")) {
+    return null;
+  }
+
+  // Last resort fallback for historical usage (e.g. "gpt-4" missing, matches "gpt-4.1")
   if (!pricing && providerPricing && typeof providerPricing === "object") {
     for (const [key, val] of Object.entries(providerPricing as Record<string, unknown>)) {
       const lm = model.toLowerCase();
@@ -224,10 +229,6 @@ function resolveModelPricing(
         pricing = val;
         break;
       }
-    }
-    if (!pricing) {
-      const keys = Object.keys(providerPricing as Record<string, unknown>);
-      if (keys.length > 0) pricing = (providerPricing as Record<string, unknown>)[keys[0]];
     }
   }
 
@@ -590,7 +591,10 @@ export async function GET(request: Request) {
         normalizeModelName,
         computeCostFromPricing
       );
-      const key = `${provider}::${short}`;
+      // Keyed by model name alone (not provider) — the table renders one row per
+      // model, so the same model served via multiple provider connections/accounts
+      // must be merged here rather than producing duplicate `key={m.model}` rows.
+      const key = short;
       const existing = modelMap.get(key) || {
         model: short,
         provider,

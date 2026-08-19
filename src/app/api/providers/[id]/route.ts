@@ -25,10 +25,16 @@ import {
 import { requireManagementAuth } from "@/lib/api/requireManagementAuth";
 import { isApiKeyRevealEnabled, maskStoredApiKey } from "@/lib/apiKeyExposure";
 import { cleanupProviderModelsAfterConnectionDelete } from "@/lib/db/models";
+import { canUpdateProviderApiKey } from "@/shared/providers/webSessionCredentials";
 import {
   refreshConnectionRateLimits,
   enableRateLimitProtection,
 } from "@/../open-sse/services/rateLimitManager";
+import {
+  finalizeValidatedChatGptWebCodexSecrets,
+  decodeChatGptWebCodexSecrets,
+  encodeChatGptWebCodexSecrets,
+} from "@omniroute/open-sse/services/chatgptWebCodexAdmin.ts";
 
 function normalizeCodexLimitPolicy(
   incoming: unknown,
@@ -156,7 +162,38 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (globalPriority !== undefined) updateData.globalPriority = globalPriority;
     if (defaultModel !== undefined) updateData.defaultModel = defaultModel;
     if (isActive !== undefined) updateData.isActive = isActive;
-    if (apiKey && existing.authType === "apikey") updateData.apiKey = apiKey;
+    if (apiKey && canUpdateProviderApiKey(existing.authType, existing.provider)) {
+      if (existing.provider === "chatgpt-web-codex") {
+        const validationId =
+          incomingPsd && typeof incomingPsd.validationId === "string"
+            ? incomingPsd.validationId
+            : "";
+        try {
+          const incomingSecrets = decodeChatGptWebCodexSecrets(apiKey);
+          const existingSecrets = decodeChatGptWebCodexSecrets(existing.apiKey || "");
+          const encoded = encodeChatGptWebCodexSecrets({
+            cookie: incomingSecrets.cookie,
+            runtimeKey: incomingSecrets.runtimeKey || existingSecrets.runtimeKey,
+          });
+          updateData.apiKey = finalizeValidatedChatGptWebCodexSecrets(
+            encoded,
+            validationId
+          ).encodedCredential;
+        } catch (error) {
+          return NextResponse.json(
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Die ChatGPT-Browserprüfung konnte nicht abgeschlossen werden.",
+            },
+            { status: 400 }
+          );
+        }
+      } else {
+        updateData.apiKey = apiKey;
+      }
+    }
     if (testStatus !== undefined) updateData.testStatus = testStatus;
     if (lastError !== undefined) updateData.lastError = lastError;
     if (lastErrorAt !== undefined) updateData.lastErrorAt = lastErrorAt;
@@ -205,6 +242,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
           ? existing.providerSpecificData
           : {};
       const mergedPsd = { ...existingPsd, ...incomingPsd };
+      delete mergedPsd.validationId;
+      delete mergedPsd.runtimeKey;
 
       // Deep-merge and normalize Codex limit policy defaults.
       if (existing.provider === "codex") {
@@ -335,6 +374,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     console.log("Error updating connection:", error);
     return NextResponse.json({ error: "Failed to update connection" }, { status: 500 });
   }
+}
+
+// PATCH /api/providers/[id] - Update connection (partial)
+// The OpenAPI spec and the CLI (`omniroute providers rotate`, generated
+// api-commands) both use PATCH, but only PUT was implemented — PATCH requests
+// 405'd. PATCH and PUT share the same update semantics here (the schema only
+// applies provided fields), so delegate to the PUT handler.
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  return PUT(request, ctx);
 }
 
 // DELETE /api/providers/[id] - Delete connection

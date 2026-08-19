@@ -10,13 +10,17 @@ import {
   type AutoCategory,
   type AutoTier,
 } from "@omniroute/open-sse/services/autoCombo/suffixComposition.ts";
+import {
+  isValidModelFamily,
+  type ModelFamily,
+} from "@omniroute/open-sse/services/autoCombo/modelFamily.ts";
 import { getCachedSettings } from "@/lib/localDb";
 import * as log from "../utils/logger";
 
 export type AutoRoutingState = {
   model: string;
   variant?: AutoVariant;
-  spec?: { category?: AutoCategory; tier?: AutoTier };
+  spec?: { category?: AutoCategory; tier?: AutoTier; family?: ModelFamily };
   isAutoRouting: boolean;
   recognizedBuiltInAuto: boolean;
   response: Response | null;
@@ -28,7 +32,12 @@ function classifyAutoModel(
   const recognizedBuiltInAuto =
     model === "auto" || Object.prototype.hasOwnProperty.call(AUTO_TEMPLATE_VARIANTS, model);
   if (Object.prototype.hasOwnProperty.call(AUTO_TEMPLATE_VARIANTS, model)) {
-    return { variant: AUTO_TEMPLATE_VARIANTS[model], recognizedBuiltInAuto: true };
+    // auto/best-free must carry spec.tier="free" so virtualFactory applies the
+    // free-tier candidate filter (excludes paid backends). Mirrors the
+    // hardcoded spec in builtinCatalog.ts:createBuiltinAutoCombo. Without this,
+    // chat.ts routes auto/best-free as plain auto/cheap (no tier filter).
+    const spec = model === "auto/best-free" ? { tier: "free" as const } : undefined;
+    return { variant: AUTO_TEMPLATE_VARIANTS[model], spec, recognizedBuiltInAuto: true };
   }
   if (!model.startsWith("auto/")) return { recognizedBuiltInAuto };
 
@@ -37,12 +46,19 @@ function classifyAutoModel(
     return { recognizedBuiltInAuto: true };
   }
   const parsedSuffix = parseAutoSuffix(suffix);
-  return parsedSuffix.valid
-    ? {
-        recognizedBuiltInAuto: true,
-        spec: { category: parsedSuffix.category, tier: parsedSuffix.tier },
-      }
-    : { recognizedBuiltInAuto };
+  if (parsedSuffix.valid) {
+    return {
+      recognizedBuiltInAuto: true,
+      spec: { category: parsedSuffix.category, tier: parsedSuffix.tier },
+    };
+  }
+  if (isValidModelFamily(suffix)) {
+    return {
+      recognizedBuiltInAuto: true,
+      spec: { family: suffix as ModelFamily },
+    };
+  }
+  return { recognizedBuiltInAuto };
 }
 
 async function applyAutoPrefix(

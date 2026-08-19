@@ -30,6 +30,8 @@ export interface RejectedRequestUsageInput {
   comboStepId?: string | null;
   comboExecutionKey?: string | null;
   correlationId?: string | null;
+  /** Conversation id (X-ConversationId) — see open-sse/services/conversationTracker.ts. */
+  sessionTag?: string | null;
   apiKeyId?: string | null;
   apiKeyName?: string | null;
   connectionId?: string | null;
@@ -56,6 +58,7 @@ export async function recordRejectedRequestUsage(input: RejectedRequestUsageInpu
     comboStepId = null,
     comboExecutionKey = null,
     correlationId = null,
+    sessionTag = null,
     apiKeyId = null,
     apiKeyName = null,
     connectionId = undefined,
@@ -86,6 +89,7 @@ export async function recordRejectedRequestUsage(input: RejectedRequestUsageInpu
     apiKeyId,
     apiKeyName,
     correlationId,
+    sessionTag,
   }).catch(() => {});
 
   // 2. usage_history — so the per-api-key usage counter reflects rejected
@@ -126,4 +130,21 @@ export function summarizeComboAttemptedModels(models: unknown): string {
     )
     .filter((entry): entry is string => Boolean(entry));
   return modelStrings.length > 0 ? modelStrings.join(", ") : "-";
+}
+
+/**
+ * Provider label for a REJECTED combo request (#8867).
+ *
+ * summarizeComboAttemptedModels() joins every attempted model, which is right for
+ * diagnostics but wrong for `call_logs.provider`: the logs page builds its quick-filter
+ * pills from that column, so one failed `auto/gemma` turned into a chip listing a dozen
+ * models and flooded the filter row. Keep it short and categorical instead — `auto` for
+ * auto/* requests, otherwise the combo's own name.
+ */
+export function resolveRejectedComboProvider(
+  model: string | null | undefined,
+  comboName: string | null | undefined
+): string {
+  if (typeof model === "string" && model.startsWith("auto/")) return "auto";
+  return comboName || "combo";
 }
