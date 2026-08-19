@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { writePidFile, cleanupPidFile, killAllSubprocesses, isPidRunning } from "../utils/pid.mjs";
 import {
   RESTART_RESET_MS,
@@ -8,13 +8,23 @@ import {
   computeRestartDelayMs,
   waitUntilPortFree,
 } from "./supervisorPolicy.mjs";
-import { buildNodeHeapArgs } from "../../../scripts/build/runtime-env.mjs";
+import { buildNodeRuntimeArgs } from "../../../scripts/build/runtime-env.mjs";
 import { stopProcessGracefully } from "../../../src/shared/platform/windowsProcess.ts";
+import {
+  isFatalInstrumentationHookFailure,
+  formatAndroidInstrumentationFailureHint,
+} from "../utils/ensureAndroidCacheDir.mjs";
 
 const CRASH_LOG_LINES = 50;
 
 export class ServerSupervisor {
-  constructor({ serverPath, env, maxRestarts = DEFAULT_MAX_RESTARTS, memoryLimit = 512, onCrashCallback }) {
+  constructor({
+    serverPath,
+    env,
+    maxRestarts = DEFAULT_MAX_RESTARTS,
+    memoryLimit = 512,
+    onCrashCallback,
+  }) {
     this.serverPath = serverPath;
     this.env = env;
     this.maxRestarts = maxRestarts;
@@ -25,38 +35,60 @@ export class ServerSupervisor {
     this.crashLog = [];
     this.child = null;
     this.isShuttingDown = false;
+    this.instrumentationFailureHintPrinted = false;
   }
 
   start() {
     this.startedAt = Date.now();
     this.crashLog = [];
+    this.instrumentationFailureHintPrinted = false;
 
     const showLog = process.env.OMNIROUTE_SHOW_LOG === "1";
-    // #5238: skip the explicit CLI --max-old-space-size when the user pinned the
-    // heap via NODE_OPTIONS (a CLI arg would shadow/override their value). The
-    // calibrated heap is already carried by env.NODE_OPTIONS either way.
-    const heapArgs = buildNodeHeapArgs(process.env, this.memoryLimit);
     // #6321: stdout used to be discarded (`"ignore"`) whenever `--log`/OMNIROUTE_SHOW_LOG
     // wasn't set (the default) — any debug/pino output written to stdout vanished
     // silently, so a boot that never becomes ready looked like a dead hang with zero
     // output even at APP_LOG_LEVEL=debug. Pipe stdout too and buffer it alongside
     // stderr so a readiness timeout can surface what the child actually printed.
-    this.child = spawn(process.versions.bun ? process.execPath : "node", [
-      ...(process.versions.bun ? [] : heapArgs),
-      this.serverPath,
-    ], {
-      cwd: dirname(this.serverPath),
-      env: this.env,
-      stdio: showLog ? "inherit" : ["ignore", "pipe", "pipe"],
-    });
+    // #9156: always spawn via process.execPath (absolute path to the running
+    // runtime — node or bun). Bare "node" is unresolvable under macOS launchd's
+    // minimal PATH; #9761's Bun ternary accidentally regressed the Node branch.
+    // Node args come from buildNodeRuntimeArgs (#9209 IPv4-first DNS + #5238
+    // heap flag handling); the Bun branch keeps #9761's polyfill preload —
+    // Bun does not accept the Node-only flags.
+    this.child = spawn(
+      process.execPath,
+      process.versions.bun
+        ? [
+            "--preload",
+            join(dirname(this.serverPath), "open-sse/utils/setupPolyfill.ts"),
+            this.serverPath,
+          ]
+        : buildNodeRuntimeArgs(process.env, this.memoryLimit, this.serverPath),
+      {
+        cwd: dirname(this.serverPath),
+        env: this.env,
+        stdio: showLog ? "inherit" : ["ignore", "pipe", "pipe"],
+      }
+    );
 
     writePidFile("server", this.child.pid);
 
     const bufferOutput = (data) => {
-      const lines = data.toString().split("\n").filter(Boolean);
+      const text = data.toString();
+      const lines = text.split("\n").filter(Boolean);
       this.crashLog.push(...lines);
       if (this.crashLog.length > CRASH_LOG_LINES) {
         this.crashLog = this.crashLog.slice(-CRASH_LOG_LINES);
+      }
+      // Surface Android/Termux instrumentation-hook failures even when --log is
+      // off (output is only buffered otherwise).
+      if (!this.instrumentationFailureHintPrinted && isFatalInstrumentationHookFailure(text)) {
+        this.instrumentationFailureHintPrinted = true;
+        process.stderr.write(
+          formatAndroidInstrumentationFailureHint(
+            this.env?.XDG_CACHE_HOME || process.env.XDG_CACHE_HOME
+          )
+        );
       }
     };
 

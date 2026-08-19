@@ -190,10 +190,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+/**
+ * Whether an `error` field carries a real failure signal. A key-presence check
+ * (`!= null`) false-positives on benign values some backends emit on every
+ * chunk (`{}`, `""`, `false`, `0`) — e.g. tool-call turns where a chunk with
+ * real tool_calls content also carries `"error": {}`. Only substantive values
+ * are treated as upstream failures.
+ */
+function isSubstantiveError(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "object" && !Array.isArray(value)) {
+    return Object.keys(value as Record<string, unknown>).length > 0;
+  }
+  return value === true;
+}
+
 function isStreamingUpstreamError(parsed: unknown, eventType: string): boolean {
   if (eventType === "response.failed" || eventType === "error") return true;
   if (!isRecord(parsed)) return false;
-  if (parsed.error != null) return true;
+  if (isSubstantiveError(parsed.error)) return true;
 
   const nestedResponse = isRecord(parsed.response) ? parsed.response : null;
   return nestedResponse?.status === "failed" && nestedResponse.error != null;
@@ -498,6 +514,24 @@ export async function validateResponseQuality(
               "Streaming OpenAI-shape response ended with no finish_reason or [DONE] — marking as invalid for combo failover"
             );
             return { valid: false, reason: "streaming openai truncated without finish_reason" };
+          }
+
+          // Issue #10404: an OpenAI-shape stream that DOES reach a terminal
+          // marker (finish_reason / [DONE]) but never carried any real
+          // content, reasoning, or tool_calls in any chunk — an upstream
+          // that burns the whole generation budget and returns
+          // completion_tokens:0 with an HTTP 200. `anyContentFound` only
+          // flips true via `isKnownNonClaudeStreamPayload` detecting
+          // content/reasoning/tool_calls (`hasOpenAICompatibleStreamValue`),
+          // so a tool_calls-only stream already exits early via the
+          // `outcome === "content"` branch above and never reaches here —
+          // this branch only fires on genuinely empty completions.
+          if (openAi.hasChoicePayload && openAi.hasTerminalMarker && !anyContentFound) {
+            log.warn?.(
+              "COMBO",
+              "Streaming OpenAI-shape response reached finish_reason/[DONE] with no content, reasoning, or tool_calls — marking as invalid for combo failover"
+            );
+            return { valid: false, reason: "streaming openai terminated with empty completion" };
           }
 
           // Incomplete lifecycle or non-Claude stream — replay all buffered

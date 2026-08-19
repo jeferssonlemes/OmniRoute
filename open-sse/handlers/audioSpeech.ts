@@ -25,6 +25,7 @@ import { handleAwsPollySpeech } from "../executors/awsPollyTts.ts";
 import { handleEdgeTtsSpeech } from "../executors/edgeTts.ts";
 import { GttsUpstreamError, normalizeGttsLang, synthesizeGtts } from "../executors/gtts.ts";
 import { errorResponse } from "../utils/error.ts";
+import { resolveElevenLabsVoiceId } from "./elevenLabsVoiceMap.ts";
 import { audioStreamResponse, upstreamErrorResponse } from "../utils/audioResponse.ts";
 import {
   getKieCallbackUrl,
@@ -229,13 +230,54 @@ async function handleDeepgramSpeech(providerConfig, body, modelId, token) {
 }
 
 /**
+ * Handle Soniox TTS (OpenAI speech shape → Soniox /tts, returns raw audio bytes)
+ */
+async function handleSonioxSpeech(providerConfig, body, modelId, token) {
+  const fmt = typeof body.response_format === "string" ? body.response_format : "mp3";
+  const audioFormat = fmt === "pcm" ? "pcm_s16le" : fmt;
+
+  const res = await fetch(providerConfig.baseUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...buildAuthHeaders(providerConfig, token),
+    },
+    body: JSON.stringify({
+      text: body.input,
+      model: modelId,
+      ...(body.voice ? { voice: body.voice } : {}),
+      audio_format: audioFormat,
+    }),
+  });
+
+  if (!res.ok) {
+    return upstreamErrorResponse(res, await res.text());
+  }
+
+  const contentType = fmt === "wav" ? "audio/wav" : fmt === "opus" ? "audio/opus" : "audio/mpeg";
+  return audioStreamResponse(res, contentType);
+}
+
+/**
  * Handle ElevenLabs TTS
  * POST {baseUrl}/{voice_id} with { text, model_id }
  * voice_id is mapped from the OpenAI `voice` parameter
  */
 async function handleElevenLabsSpeech(providerConfig, body, modelId, token) {
-  // ElevenLabs uses voice_id in URL path; default to "21m00Tcm4TlvDq8ikWAM" (Rachel)
-  const voiceId = body.voice || "21m00Tcm4TlvDq8ikWAM";
+  // ElevenLabs uses voice_id in URL path. body.voice may be an OpenAI stock voice name
+  // (alloy, echo, ...), a known ElevenLabs display name (Rachel, ...), or a raw voice_id;
+  // resolve it to a real voice_id before it ever reaches the URL. Defaults to Rachel
+  // ("21m00Tcm4TlvDq8ikWAM") when omitted.
+  if (typeof body.voice === "string" && !isValidPathSegment(body.voice)) {
+    return errorResponse(400, "Invalid voice ID");
+  }
+  const voiceId = resolveElevenLabsVoiceId(body.voice);
+  if (!voiceId) {
+    return errorResponse(
+      400,
+      "Unknown ElevenLabs voice. Provide a real ElevenLabs voice_id, a supported OpenAI voice name (alloy, echo, fable, onyx, nova, shimmer), or a known ElevenLabs display name."
+    );
+  }
   if (!isValidPathSegment(voiceId)) {
     return errorResponse(400, "Invalid voice ID");
   }
@@ -618,7 +660,7 @@ async function handleXiaomiMimoSpeech(providerConfig, body, modelId, token, cred
  * `base_resp.status_code` (0 = success).
  * Port of decolua/9router#1043 by toanalien <toanalien@gmail.com>.
  */
-function hexToBytes(audioHex) {
+function hexToBytes(audioHex): Uint8Array<ArrayBuffer> {
   const clean = typeof audioHex === "string" ? audioHex.trim() : "";
   if (!clean) throw new Error("MiniMax TTS returned no audio");
   if (clean.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(clean)) {
@@ -684,7 +726,7 @@ async function handleMinimaxSpeech(providerConfig, body, modelId, token) {
   }
 
   const audioField = (data.data as Record<string, unknown> | undefined)?.audio;
-  let bytes: Uint8Array;
+  let bytes: Uint8Array<ArrayBuffer>;
   try {
     bytes = hexToBytes(audioField);
   } catch (err) {
@@ -844,6 +886,10 @@ export async function handleAudioSpeech({
 
     if (providerConfig.format === "deepgram") {
       return handleDeepgramSpeech(providerConfig, body, modelId, token);
+    }
+
+    if (providerConfig.format === "soniox-tts") {
+      return handleSonioxSpeech(providerConfig, body, modelId, token);
     }
 
     if (providerConfig.format === "elevenlabs") {

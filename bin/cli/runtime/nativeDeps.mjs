@@ -94,10 +94,12 @@ export function isBetterSqliteBinaryValid() {
     const magic = buf.toString("hex");
     const os = platform();
     let formatOk;
-    if (os === "linux") formatOk = magic.startsWith("7f454c46"); // ELF
+    if (os === "linux")
+      formatOk = magic.startsWith("7f454c46"); // ELF
     else if (os === "darwin")
       formatOk = magic.startsWith("cffaedfe") || magic.startsWith("cefaedfe"); // Mach-O
-    else if (os === "win32") formatOk = magic.startsWith("4d5a"); // PE/MZ
+    else if (os === "win32")
+      formatOk = magic.startsWith("4d5a"); // PE/MZ
     else formatOk = true;
     if (!formatOk) return false;
     // File-format magic bytes alone do not guarantee the binary was built for the Node ABI
@@ -116,6 +118,11 @@ export function npmInstallRuntime(pkgs, opts = {}) {
   // install of a sibling runtime dep (e.g. systray2 from trayRuntime.ts, which writes to the
   // same runtime dir) does not prune this package as "extraneous" — that pruning otherwise
   // reproduces "No SQLite driver available" after a tray install removes better-sqlite3.
+  // npm 12+ defaults `allowScripts` to off, silently skipping lifecycle/install
+  // scripts (e.g. better-sqlite3's node-gyp/prebuild-install rebuild) unless the
+  // package has a matching `allowScripts` entry — and still exits 0, masking the
+  // failure (#10713). The runtime dir is a CLI-owned, non-user package.json, so
+  // explicitly allowing scripts for the packages we are installing here is safe.
   const npmArgs = [
     "install",
     ...pkgs,
@@ -123,6 +130,7 @@ export function npmInstallRuntime(pkgs, opts = {}) {
     "--no-fund",
     "--prefer-online",
     "--save-exact",
+    ...pkgs.map((pkg) => `--allow-scripts=${pkg}`),
   ];
   // On Windows .cmd files cannot be executed without a shell; use cmd.exe /c explicitly
   // so we never set shell:true (which would propagate env and enable injection).
@@ -152,9 +160,18 @@ export function ensureBetterSqliteRuntime({ silent = false, force = false } = {}
     if (!silent) process.stdout.write("[omniroute][runtime] better-sqlite3 OK\n");
     return { betterSqlite: true };
   }
+  if (!silent) {
+    process.stdout.write(
+      `[omniroute][runtime] Installing better-sqlite3@${BETTER_SQLITE3_VERSION} into runtime...\n`
+    );
+  }
   const ok = npmInstallRuntime([`better-sqlite3@${BETTER_SQLITE3_VERSION}`], { silent });
   if (!ok && !silent) {
-    process.stderr.write("[omniroute][runtime] better-sqlite3 install failed\n");
+    process.stderr.write(
+      "[omniroute][runtime] better-sqlite3 install failed.\n" +
+        "  This usually means npm install scripts are blocked.\n" +
+        "  Try: npm install-scripts approve better-sqlite3\n"
+    );
   }
   return { betterSqlite: ok && hasModule("better-sqlite3") && isBetterSqliteBinaryValid() };
 }
