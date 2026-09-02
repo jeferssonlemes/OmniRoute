@@ -759,7 +759,7 @@ export function getSyncStatus(): SyncStatus {
   };
 }
 
-// ─── Init (called from server-init.ts) ───────────────────
+// ─── Init (called from instrumentation-node.ts) ───────────────────
 
 /**
  * Initialize models.dev sync if enabled.
@@ -770,7 +770,7 @@ export async function initModelsDevSync(): Promise<void> {
     return;
   }
 
-  const { getSettings } = await import("./localDb");
+  const { getSettings } = await import("@/lib/db/settings");
   const settings = await getSettings();
 
   if (!isModelsDevSyncEnvForcedOn() && settings.modelsDevSyncEnabled !== true) {

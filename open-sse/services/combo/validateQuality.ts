@@ -617,7 +617,18 @@ export async function validateResponseQuality(
   try {
     json = JSON.parse(text);
   } catch {
-    if (text.startsWith("data:") || text.startsWith("event:")) return { valid: true };
+    // An SSE stream body is expected for streamed upstreams. Besides `data:` and
+    // `event:` frames, the SSE spec also allows comment lines that begin with a
+    // colon (`:`), which providers use for keep-alives while the model is still
+    // generating — e.g. OpenRouter emits `: OPENROUTER PROCESSING` on slower /
+    // reasoning responses. A stream that opens with such a comment (or with
+    // leading whitespace/newlines) is still a valid stream, not malformed JSON,
+    // so trim and recognize the comment prefix before rejecting. Without this,
+    // otherwise-good streamed completions get failed as "not valid JSON".
+    const trimmed = text.trimStart();
+    if (trimmed.startsWith("data:") || trimmed.startsWith("event:") || trimmed.startsWith(":")) {
+      return { valid: true };
+    }
     return { valid: false, reason: "response is not valid JSON" };
   }
 
@@ -734,6 +745,24 @@ export async function validateResponseQuality(
   // tokens or falls back to a non-reasoning model.
   const contentIsEmpty = content === null || content === undefined || content === "";
   if (contentIsEmpty && hasReasoningContent && !hasToolCalls) {
+    // The 90%-of-completion-tokens ratio below is a proxy for "the request was
+    // truncated mid-reasoning" for providers that don't report finish_reason
+    // reliably. When finish_reason IS reported as "length" (or the Anthropic-shape
+    // "max_tokens"), that's a direct, unambiguous signal of truncation — trust it
+    // over the ratio instead of requiring reasoning to also clear 90%. A response
+    // truncated at, say, 60% reasoning still has zero usable content for the
+    // caller. This does not affect the deliberate-tiny-probe case (e.g.
+    // `max_tokens: 1` connectivity pings, see errorClassifier.ts's
+    // LEGIT_EMPTY_OPENAI_FINISH): those produce no reasoning_content at all, so
+    // hasReasoningContent is already false and this branch never runs for them.
+    const finishReason =
+      typeof firstChoice.finish_reason === "string" ? firstChoice.finish_reason : "";
+    if (finishReason === "length" || finishReason === "max_tokens") {
+      return {
+        valid: false,
+        reason: `reasoning truncated at token limit (finish_reason: ${finishReason}) — no content output`,
+      };
+    }
     const usage = json?.usage as Record<string, unknown> | undefined;
     if (usage) {
       const completionTokens = Number(usage.completion_tokens) || 0;

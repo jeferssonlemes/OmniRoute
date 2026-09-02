@@ -260,6 +260,57 @@ export async function warmAdaptiveVirtualLanesIntoRuntime(): Promise<void> {
   }
 }
 
+/**
+ * Register bespoke + generic quota fetchers once at Node.js boot. The legacy
+ * `src/sse/handlers/chat.ts` path registered these at module load, but the
+ * Next.js App Router production entry (`registerNodejs`) never did, leaving
+ * `quotaFetcherRegistry` empty for generic providers (antigravity, claude,
+ * etc.) and causing reset-aware scoring to fall back to the 0.5 dead score.
+ *
+ * Each registration call is idempotent; bespoke fetchers are registered first
+ * so the generic registrar skips providers that already have a dedicated
+ * fetcher.
+ */
+export async function registerQuotaFetchers(): Promise<void> {
+  // Side-effect registrations for agentrouter, freeModel, grokCli, xaiOauth,
+  // firecrawl (same ordering as the legacy chat.ts path).
+  await import("@omniroute/open-sse/services/quotaTrackersBatch.ts");
+
+  const [
+    { registerCodexQuotaFetcher },
+    { registerBailianCodingPlanQuotaFetcher },
+    { registerQwenTokenPlanQuotaFetcher },
+    { registerCrofUsageFetcher },
+    { registerDeepseekQuotaFetcher },
+    { registerOpenrouterQuotaFetcher },
+    { registerOpencodeQuotaFetcher },
+    { registerGrokWebQuotaFetcher },
+    { registerGenericQuotaFetchers },
+  ] = await Promise.all([
+    import("@omniroute/open-sse/services/codexQuotaFetcher"),
+    import("@omniroute/open-sse/services/bailianQuotaFetcher"),
+    import("@omniroute/open-sse/services/qwenTokenPlanQuotaFetcher"),
+    import("@omniroute/open-sse/services/crofUsageFetcher"),
+    import("@omniroute/open-sse/services/deepseekQuotaFetcher"),
+    import("@omniroute/open-sse/services/openrouterQuotaFetcher"),
+    import("@omniroute/open-sse/services/opencodeQuotaFetcher"),
+    import("@omniroute/open-sse/services/grokQuotaFetcher"),
+    import("@omniroute/open-sse/services/genericQuotaFetcher"),
+  ]);
+
+  registerCodexQuotaFetcher();
+  registerBailianCodingPlanQuotaFetcher();
+  registerQwenTokenPlanQuotaFetcher();
+  registerCrofUsageFetcher();
+  registerDeepseekQuotaFetcher();
+  registerOpenrouterQuotaFetcher();
+  registerOpencodeQuotaFetcher();
+  registerGrokWebQuotaFetcher();
+  registerGenericQuotaFetchers();
+
+  console.log("[STARTUP] Quota fetchers registered");
+}
+
 export async function registerNodejs(): Promise<void> {
   markServerStarting();
 
@@ -268,8 +319,12 @@ export async function registerNodejs(): Promise<void> {
   process.title = renameProcessTitle(process.title);
 
   // Initialize proxy fetch patch FIRST (before any HTTP requests)
-  await import("@omniroute/open-sse/index.ts");
+  await import("@omniroute/open-sse/utils/proxyFetch.ts");
   console.log("[STARTUP] Global fetch proxy patch initialized");
+
+  // Register quota fetchers early so combo routing can use real quota-aware
+  // scoring for generic providers in the App Router production runtime.
+  await registerQuotaFetchers();
 
   // Guarantee the SQLite singleton — including a sql.js WASM pre-init when
   // both synchronous drivers (better-sqlite3, node:sqlite) are unavailable —
@@ -471,8 +526,12 @@ export async function registerNodejs(): Promise<void> {
   // instrumentation startup), NOT in the unused src/server-init.ts.
   try {
     const { initCredentialHealthCheck } = await import("@/lib/credentialHealth/scheduler");
-    initCredentialHealthCheck();
-    console.log("[STARTUP] Credential health scheduler started");
+    const started = initCredentialHealthCheck();
+    console.log(
+      started
+        ? "[STARTUP] Credential health scheduler started"
+        : "[STARTUP] Credential health scheduler disabled"
+    );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn("[STARTUP] Could not start credential health scheduler:", msg);
@@ -566,12 +625,14 @@ export async function registerNodejs(): Promise<void> {
 
       // Conductor bridge (PRD Conductor RF1): mirrors OmniConductor hub tasks into the
       // A2A TaskManager via the hub SSE. Opt-in — self-gated on CONDUCTOR_HUB_URL.
-      import("@/lib/conductor/boot").then((m) => {
-        if (m.initConductorBridge()) console.log("[STARTUP] Conductor bridge started");
-      }).catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn("[STARTUP] Conductor bridge failed to start (non-fatal):", msg);
-      }),
+      import("@/lib/conductor/boot")
+        .then((m) => {
+          if (m.initConductorBridge()) console.log("[STARTUP] Conductor bridge started");
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn("[STARTUP] Conductor bridge failed to start (non-fatal):", msg);
+        }),
 
       // Proactive connection-cooldown recovery (#8): re-validate connections whose
       // transient `rate_limited_until` window has elapsed OUTSIDE the request hot path,

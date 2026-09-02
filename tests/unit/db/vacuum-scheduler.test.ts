@@ -27,6 +27,7 @@ import path from "node:path";
 
 const TEST_DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "omniroute-vacuum-scheduler-"));
 const originalDataDir = process.env.DATA_DIR;
+const originalScheduledVacuum = process.env.OMNIROUTE_SCHEDULED_VACUUM;
 
 process.env.DATA_DIR = TEST_DATA_DIR;
 
@@ -46,6 +47,7 @@ function setOptimizationSettings(values: { scheduledVacuum?: string; vacuumHour?
 }
 
 test.beforeEach(() => {
+  delete process.env.OMNIROUTE_SCHEDULED_VACUUM;
   scheduler.__resetForTests();
   const db = core.getDbInstance();
   db.prepare("DELETE FROM key_value WHERE namespace IN ('scheduler', 'databaseSettings')").run();
@@ -54,9 +56,11 @@ test.beforeEach(() => {
 test.after(() => {
   scheduler.__resetForTests();
   core.resetDbInstance();
-  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   if (originalDataDir === undefined) delete process.env.DATA_DIR;
   else process.env.DATA_DIR = originalDataDir;
+  if (originalScheduledVacuum === undefined) delete process.env.OMNIROUTE_SCHEDULED_VACUUM;
+  else process.env.OMNIROUTE_SCHEDULED_VACUUM = originalScheduledVacuum;
 });
 
 test("module loads and exports the expected public API", () => {
@@ -118,6 +122,39 @@ test("init() honors Storage scheduledVacuum=never", () => {
 test("init() honors Storage schedule settings", () => {
   setOptimizationSettings({ scheduledVacuum: "weekly", vacuumHour: 4 });
   const state = scheduler.init();
+  assert.equal(state.enabled, true);
+  assert.equal(state.intervalMs, 7 * 24 * 60 * 60 * 1000);
+  assert.notEqual(state.nextRunAt, null);
+});
+
+test("OMNIROUTE_SCHEDULED_VACUUM=never overrides the persisted weekly schedule", () => {
+  setOptimizationSettings({ scheduledVacuum: "weekly", vacuumHour: 4 });
+  process.env.OMNIROUTE_SCHEDULED_VACUUM = "never";
+
+  const state = scheduler.init();
+
+  assert.equal(state.enabled, false);
+  assert.equal(state.intervalMs, 0);
+  assert.equal(state.nextRunAt, null);
+});
+
+test("OMNIROUTE_SCHEDULED_VACUUM accepts an enabled schedule override", () => {
+  setOptimizationSettings({ scheduledVacuum: "never", vacuumHour: 4 });
+  process.env.OMNIROUTE_SCHEDULED_VACUUM = "monthly";
+
+  const state = scheduler.init();
+
+  assert.equal(state.enabled, true);
+  assert.equal(state.intervalMs, 30 * 24 * 60 * 60 * 1000);
+  assert.notEqual(state.nextRunAt, null);
+});
+
+test("invalid OMNIROUTE_SCHEDULED_VACUUM falls back to the persisted schedule", () => {
+  setOptimizationSettings({ scheduledVacuum: "weekly", vacuumHour: 4 });
+  process.env.OMNIROUTE_SCHEDULED_VACUUM = "sometimes";
+
+  const state = scheduler.init();
+
   assert.equal(state.enabled, true);
   assert.equal(state.intervalMs, 7 * 24 * 60 * 60 * 1000);
   assert.notEqual(state.nextRunAt, null);

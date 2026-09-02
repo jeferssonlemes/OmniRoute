@@ -30,12 +30,14 @@ export const HIDEABLE_SIDEBAR_ITEM_IDS = [
   "acp-agents",
   "cloud-agents",
   "conductor",
+  "orchestration",
   "agent-bridge",
   "traffic-inspector",
   "discovery",
   // OmniProxy > Integrations
   "api-endpoints",
   "webhooks",
+  "log-export",
   // OmniProxy — proxy tools
   "mitm-proxy",
   "1proxy",
@@ -88,6 +90,7 @@ export const HIDEABLE_SIDEBAR_ITEM_IDS = [
   "leaderboard",
   "profile",
   "tokens",
+  "gamification-admin",
   // Other Features — flat
   "media",
   // Other Features > Batch
@@ -174,7 +177,7 @@ export interface SidebarSectionDefinition {
   defaultPinned?: boolean;
 }
 
-export type SidebarPresetId = "all" | "minimal" | "developer" | "admin";
+export type SidebarPresetId = "all" | "essentials" | "minimal" | "developer" | "admin";
 
 export interface SidebarPresetDefinition {
   id: SidebarPresetId;

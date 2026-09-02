@@ -191,7 +191,7 @@ function isOptionalFts5Migration(migration: { version: string; name: string }): 
   return OPTIONAL_FTS5_MIGRATION_VERSIONS.has(migration.version);
 }
 
-function supportsFts5(db: SqliteAdapter): boolean {
+export function supportsFts5(db: SqliteAdapter): boolean {
   const cached = fts5SupportCache.get(db);
   if (cached !== undefined) {
     return cached;
@@ -505,6 +505,17 @@ function isSchemaAlreadyApplied(
       // Retroactive guard for 143_radar_local_model_state -> 153. A database
       // that already created the table must not execute or track it twice.
       return hasTable(db, "radar_local_model_state");
+    case "159":
+      // Renumbered from 158 (collided with 158_call_logs_error_type on
+      // release/v3.8.50). Idempotent freepik->magnific slug rewrite: skip
+      // when provider_connections has no remaining freepik rows (already
+      // applied under 158, or a DB that never stored Freepik).
+      if (migration.name !== "rename_freepik_to_magnific") return false;
+      if (!hasTable(db, "provider_connections")) return false;
+      return (
+        db.prepare("SELECT 1 FROM provider_connections WHERE provider = 'freepik' LIMIT 1").get() ==
+        null
+      );
     default:
       return false;
   }
