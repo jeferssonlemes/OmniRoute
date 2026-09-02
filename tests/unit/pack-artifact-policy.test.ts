@@ -15,6 +15,21 @@ import {
   parseJsonValuesOutput,
 } from "../../scripts/build/pack-artifact-policy.ts";
 
+test("artifact path policy arrays contain no duplicate entries", () => {
+  const policies = {
+    APP_STAGING_ALLOWED_EXACT_PATHS,
+    APP_STAGING_ALLOWED_PATH_PREFIXES,
+    PACK_ARTIFACT_ALLOWED_EXACT_PATHS,
+    PACK_ARTIFACT_ALLOWED_PATH_PREFIXES,
+    PACK_ARTIFACT_REQUIRED_PATHS,
+  };
+
+  for (const [name, paths] of Object.entries(policies)) {
+    const duplicates = [...new Set(paths.filter((entry, index) => paths.indexOf(entry) !== index))];
+    assert.deepEqual(duplicates, [], `${name} contains duplicate paths: ${duplicates.join(", ")}`);
+  }
+});
+
 test("normalizeArtifactPath normalizes slashes and leading relative markers", () => {
   assert.equal(
     normalizeArtifactPath("./app\\scripts\\ad-hoc\\test.js"),
@@ -117,6 +132,45 @@ test("findUnexpectedArtifactPaths flags node_modules even inside an allowed pref
   ]);
 });
 
+test("staging mode (neverAllowedSegments: []) keeps runtime node_modules under allowed prefixes (#11317)", () => {
+  // #9985/#11300-class regression: the app-STAGING prune reused the npm-pack
+  // never-allowed "node_modules" segment, deleting the standalone server's
+  // runtime deps — Turbopack-hashed sql.js (sql-wasm.wasm!) and transformers
+  // ort-wasm — so every packaged boot 500'd on all DB-backed routes while
+  // /api/monitoring/health stayed green. Staging allowlist prefixes are the
+  // runtime contract; the node_modules segment ban is a PUBLISH-tarball rule.
+  const unexpectedPaths = findUnexpectedArtifactPaths(
+    [
+      ".build/next/node_modules/sql.js-59d66b30daa0a8d2/dist/sql-wasm.wasm",
+      ".build/next/node_modules/@huggingface/transformers-31f28a0eb9b916d1/dist/transformers.js",
+      ".build/next/node_modules/@huggingface/transformers-31f28a0eb9b916d1/node_modules/tsup/package.json",
+      "node_modules/sql.js/dist/sql-wasm.wasm",
+      "package-lock.json",
+    ],
+    {
+      exactPaths: APP_STAGING_ALLOWED_EXACT_PATHS,
+      prefixPaths: APP_STAGING_ALLOWED_PATH_PREFIXES,
+      neverAllowedSegments: [],
+    }
+  );
+
+  assert.deepEqual(unexpectedPaths, ["package-lock.json"]);
+});
+
+test("default pack mode still rejects node_modules under .build/next (tarball guard intact)", () => {
+  const unexpectedPaths = findUnexpectedArtifactPaths(
+    [".build/next/node_modules/sql.js-59d66b30daa0a8d2/dist/sql-wasm.wasm"],
+    {
+      exactPaths: PACK_ARTIFACT_ALLOWED_EXACT_PATHS,
+      prefixPaths: PACK_ARTIFACT_ALLOWED_PATH_PREFIXES,
+    }
+  );
+
+  assert.deepEqual(unexpectedPaths, [
+    ".build/next/node_modules/sql.js-59d66b30daa0a8d2/dist/sql-wasm.wasm",
+  ]);
+});
+
 test("package.json files[] excludes nested node_modules from the published package", () => {
   // The gate above is defence-in-depth; this pins the actual fix. Without the
   // "!**/node_modules/**" negation the tarball was 99.4 MB unpacked (31.3 MB
@@ -210,9 +264,13 @@ test("findMissingArtifactPaths flags missing root runtime files in the tarball",
     "bin/cli/utils/parseEnvValue.mjs",
     "bin/cli/utils/storageKeyProvision.mjs",
     "bin/cli/utils/versionFastPath.mjs",
+    "bin/cli/utils/volatileEnvPath.mjs",
     "bin/mcp-server.mjs",
     "bin/mcpStdioConsoleGuard.mjs",
     "bin/nodeRuntimeSupport.mjs",
+    "config/release/wreq-js-native-manifest.json",
+    "config/release/wreq-js-rust-license-inventory.json",
+    "config/release/wreq-js-rust-notices.md",
     "dist/head-response-guard.cjs",
     "dist/http-method-guard.cjs",
     "dist/main-server-timeouts.mjs",
@@ -223,12 +281,13 @@ test("findMissingArtifactPaths flags missing root runtime files in the tarball",
     "dist/responses-ws-proxy.mjs",
     "dist/server-ws.mjs",
     "dist/src/lib/usage/callLogArtifactWorker.js",
+    "dist/systemd-notify.mjs",
     "dist/tls-options.mjs",
     "dist/webdav-handler.mjs",
     "scripts/build/colocateOptionals.mjs",
-    "scripts/build/fixTlsClientNodeBinary.mjs",
     "scripts/build/native-binary-compat.mjs",
     "scripts/build/runtime-env.mjs",
+    "scripts/build/wreqJsNative.mjs",
     "scripts/packs/optionalPackInstaller.mjs",
     "scripts/packs/optionalPackManifest.mjs",
     "src/shared/utils/nodeRuntimeSupport.ts",

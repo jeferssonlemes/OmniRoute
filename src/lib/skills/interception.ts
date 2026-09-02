@@ -1,6 +1,7 @@
 import { skillExecutor } from "./executor";
 import { skillRegistry } from "./registry";
 import { builtinSkills } from "./builtins";
+import { memoryBuiltinHandlers, MEMORY_BUILTIN_TOOL_NAMES } from "./memoryBuiltins";
 import { detectProvider, decodeSkillToolName } from "./injection";
 import { OMNIROUTE_WEB_SEARCH_FALLBACK_TOOL_NAME } from "@omniroute/open-sse/services/webSearchFallback.ts";
 import { OMNIROUTE_WEB_FETCH_FALLBACK_TOOL_NAME } from "@omniroute/open-sse/services/webFetchInterception.ts";
@@ -32,10 +33,12 @@ const BUILTIN_TOOL_ALIASES: Record<string, string> = {
   [OMNIROUTE_WEB_FETCH_FALLBACK_TOOL_NAME]: "web_fetch",
 };
 
+const MEMORY_TOOL_NAMES = new Set<string>(MEMORY_BUILTIN_TOOL_NAMES);
+
 function resolveBuiltinHandlerName(
   toolName: string,
   context: ExecutionContext
-): keyof typeof builtinSkills | null {
+): keyof typeof builtinSkills | keyof typeof memoryBuiltinHandlers | null {
   const [rawName] = toolName.includes("@") ? toolName.split("@") : [toolName];
   const canonicalName = BUILTIN_TOOL_ALIASES[rawName] || rawName;
   const allowed = new Set(
@@ -46,7 +49,13 @@ function resolveBuiltinHandlerName(
     return null;
   }
 
-  return canonicalName in builtinSkills ? (canonicalName as keyof typeof builtinSkills) : null;
+  if (canonicalName in builtinSkills) {
+    return canonicalName as keyof typeof builtinSkills;
+  }
+  if (MEMORY_TOOL_NAMES.has(canonicalName)) {
+    return canonicalName as keyof typeof memoryBuiltinHandlers;
+  }
+  return null;
 }
 
 function getResponsesOutputContainer(response: Record<string, unknown> | null | undefined): {
@@ -95,12 +104,24 @@ export async function interceptToolCalls(
             callId: call.id,
           });
 
-          const result = await builtinSkills[builtinHandlerName](call.arguments, {
-            apiKeyId: context.apiKeyId,
-            sessionId: context.sessionId,
-            provider: context.provider,
-            model: context.model,
-          });
+          const isMemoryHandler = MEMORY_TOOL_NAMES.has(builtinHandlerName);
+          const result = isMemoryHandler
+            ? await memoryBuiltinHandlers[builtinHandlerName as keyof typeof memoryBuiltinHandlers](
+                call.arguments,
+                {
+                  apiKeyId: context.apiKeyId,
+                  sessionId: context.sessionId,
+                }
+              )
+            : await builtinSkills[builtinHandlerName as keyof typeof builtinSkills](
+                call.arguments,
+                {
+                  apiKeyId: context.apiKeyId,
+                  sessionId: context.sessionId,
+                  provider: context.provider,
+                  model: context.model,
+                }
+              );
 
           log.info("skills.interception.execution_complete", {
             toolName: call.name,
@@ -235,6 +256,53 @@ function isRegisteredCustomSkill(toolName: string, apiKeyId: string): boolean {
   return skillRegistry.getSkill(identifier, apiKeyId) != null;
 }
 
+/**
+ * Build a native Responses API `web_search_call` output item from an executed
+ * web-search fallback call. OpenAI Responses clients (Codex CLI, pi-web-access,
+ * …) send the built-in `web_search` tool and expect the response to carry a
+ * `web_search_call` item with `action.sources`; without it they only receive the
+ * internal `function_call`/`function_call_output` round-trip and cannot consume
+ * the search results. Returns null when the call was not the web-search
+ * fallback, or when the search failed / returned no usable result payload.
+ */
+export function buildWebSearchCallItem(
+  call: ToolCall,
+  result: unknown
+): Record<string, unknown> | null {
+  if (call.name !== OMNIROUTE_WEB_SEARCH_FALLBACK_TOOL_NAME) return null;
+  const record = result && typeof result === "object" ? (result as Record<string, unknown>) : null;
+  if (!record || record.success !== true) return null;
+
+  const results = Array.isArray(record.results) ? record.results : [];
+  const sources = results
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const source = entry as Record<string, unknown>;
+      const url = typeof source.url === "string" ? source.url : "";
+      if (!url) return null;
+      const title = typeof source.title === "string" ? source.title : url;
+      const caption =
+        typeof source.snippet === "string" && source.snippet
+          ? source.snippet
+          : typeof source.display_url === "string"
+            ? source.display_url
+            : "";
+      return { title, url, caption };
+    })
+    .filter((source): source is { title: string; url: string; caption: string } => source !== null);
+
+  return {
+    id: `ws_${call.id}`,
+    type: "web_search_call",
+    status: "completed",
+    action: {
+      type: "web_search",
+      query: typeof record.query === "string" ? record.query : "",
+      sources,
+    },
+  };
+}
+
 export async function handleToolCallExecution(
   response: any,
   modelId: string,
@@ -278,10 +346,19 @@ export async function handleToolCallExecution(
           output: JSON.stringify(result.result),
         }));
 
+        // OpenAI Responses clients that declared the native `web_search` tool get
+        // a spec-shaped `web_search_call` item alongside the preserved internal
+        // function-call round-trip, so their own web-search handling can consume
+        // the executed results (pi-web-access / Codex-style consumers).
+        const resultById = new Map(results.map((r) => [r.id, r.result]));
+        const webSearchCalls = toolCalls
+          .map((call) => buildWebSearchCallItem(call, resultById.get(call.id)))
+          .filter((item): item is Record<string, unknown> => item !== null);
+
         if (responsesOutput.root === responsesOutput.responseRoot) {
           return {
             ...response,
-            output: [...responsesOutput.output, ...functionOutputs],
+            output: [...responsesOutput.output, ...functionOutputs, ...webSearchCalls],
           };
         }
 
@@ -289,7 +366,7 @@ export async function handleToolCallExecution(
           ...response,
           response: {
             ...responsesOutput.responseRoot,
-            output: [...responsesOutput.output, ...functionOutputs],
+            output: [...responsesOutput.output, ...functionOutputs, ...webSearchCalls],
           },
         };
       }
@@ -323,9 +400,7 @@ export async function handleToolCallExecution(
       );
       const resultTextBlocks = results.map((r) => ({
         type: "text",
-        text: `[Skill result: ${toolNamesById.get(r.id) || r.id}]\n${JSON.stringify(
-          r.result
-        )}`,
+        text: `[Skill result: ${toolNamesById.get(r.id) || r.id}]\n${JSON.stringify(r.result)}`,
       }));
       const firstRemainingToolUseIndex = remainingContent.findIndex(
         (block: any) => block?.type === "tool_use"

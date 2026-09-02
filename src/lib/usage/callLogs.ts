@@ -39,6 +39,7 @@ import {
   toStoredErrorSummary,
   protectPipelinePayloads,
   buildRequestSummary,
+  classifyCallLogError,
 } from "./callLogs/format";
 import {
   clearArtifactReference,
@@ -139,7 +140,7 @@ async function resolveAccountName(connectionId: string | null | undefined) {
   }
 
   try {
-    const { getProviderConnections } = await import("@/lib/localDb");
+    const { getProviderConnections } = await import("@/lib/db/providers");
     const connections = await getProviderConnections();
     const conn = connections.find((item) => item.id === connectionId);
     if (conn) {
@@ -159,7 +160,7 @@ async function resolveAccountName(connectionId: string | null | undefined) {
 async function resolveProviderPrefix(providerId: string): Promise<string | null> {
   if (!providerId) return null;
   try {
-    const { getProviderNodeById } = await import("@/lib/localDb");
+    const { getProviderNodeById } = await import("@/lib/db/providers");
     const node = await getProviderNodeById(providerId);
     if (node && typeof node.prefix === "string" && node.prefix.trim().length > 0) {
       return node.prefix.trim();
@@ -177,7 +178,7 @@ function isCompatibleProviderId(providerId: string | null): boolean {
   );
 }
 
-function applyNodePrefix(
+export function applyNodePrefix(
   requestedModel: string | null,
   provider: string | null,
   nodePrefix: string | null
@@ -340,7 +341,7 @@ function readLegacyLogFromDisk(entry: {
   return null;
 }
 
-function resolveProviderDisplay(
+export function resolveProviderDisplay(
   provider: string | null,
   nodeName: string | null,
   nodePrefix: string | null
@@ -464,12 +465,14 @@ async function saveCallLogOperation(entry: any): Promise<void> {
     // while reasoning source/char-count are recorded separately for observability.
     const tokensReasoning = getReasoningTokensOrNull(entry.tokens);
     const reasoningObservation = resolveReasoningObservation(tokensReasoning, entry.responseBody);
+    const errorType = classifyCallLogError(entry.status, entry.error, entry.provider);
     const logEntry = {
       id: typeof entry.id === "string" && entry.id.length > 0 ? entry.id : generateLogId(),
       timestamp: typeof entry.timestamp === "string" ? entry.timestamp : new Date().toISOString(),
       method: entry.method || "POST",
       path: entry.path || "/v1/chat/completions",
       status: entry.status || 0,
+      errorType,
       model: entry.model || "-",
       requestedModel: resolvedRequestedModel,
       provider: rawProvider,
@@ -550,7 +553,7 @@ async function saveCallLogOperation(entry: any): Promise<void> {
         combo_name, combo_step_id, combo_execution_key, error_summary, detail_state,
         artifact_relpath, artifact_size_bytes, artifact_sha256,
         has_request_body, has_response_body, has_pipeline_details, request_summary,
-        correlation_id, model_pinned, session_tag, response_id
+        correlation_id, model_pinned, session_tag, response_id, error_type
       )
       VALUES (
         @id, @timestamp, @method, @path, @status, @model, @requestedModel, @provider,
@@ -561,7 +564,7 @@ async function saveCallLogOperation(entry: any): Promise<void> {
         @comboName, @comboStepId, @comboExecutionKey, @errorSummary, @detailState,
         @artifactRelPath, @artifactSizeBytes, @artifactSha256,
         @hasRequestBody, @hasResponseBody, @hasPipelineDetails, @requestSummary,
-        @correlationId, @modelPinned, @sessionTag, @responseId
+        @correlationId, @modelPinned, @sessionTag, @responseId, @errorType
       )
     `
     ).run({
@@ -706,6 +709,14 @@ export async function getCallLogs(filter: any = {}) {
   pushLikeFilter(conditions, params, "session_tag", "sessionTag", filter.sessionTag);
   if (filter.combo) {
     conditions.push("cl.combo_name IS NOT NULL");
+  }
+  if (filter.excludeTests) {
+    // Home "Recent Requests" is an allowlist of real provider inference, not a
+    // blacklist of known backend log types. Persisted provider requests enter via
+    // the public gateway namespaces (/v1/* or /api/v1/*); internal management work
+    // (connection tests, model sync, and future /api/providers/* jobs) does not.
+    // Apply this before LIMIT so backend rows can never displace real traffic.
+    conditions.push(`(cl.path LIKE '/v1/%' OR cl.path LIKE '/api/v1/%')`);
   }
   if (filter.since) {
     conditions.push("cl.timestamp >= @since");

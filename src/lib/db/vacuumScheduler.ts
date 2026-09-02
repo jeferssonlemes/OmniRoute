@@ -147,6 +147,11 @@ function readScheduleSettings(): VacuumScheduleSettings {
     ),
   };
 
+  settings.scheduledVacuum = normalizeSchedule(
+    process.env.OMNIROUTE_SCHEDULED_VACUUM,
+    settings.scheduledVacuum
+  );
+
   return settings;
 }
 

@@ -29,13 +29,13 @@ const auth = await import("../../src/sse/services/auth.ts");
 
 async function resetStorage() {
   core.resetDbInstance();
-  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   fs.mkdirSync(TEST_DATA_DIR, { recursive: true });
 }
 
 test.after(() => {
   core.resetDbInstance();
-  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true });
+  fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 });
 
 test("getProviderCredentials still serves a :free OpenRouter model after the connection is credits_exhausted", async () => {
@@ -78,7 +78,11 @@ test("getProviderCredentials still refuses a PAID OpenRouter model on a credits_
     "anthropic/claude-opus-4.5"
   );
 
-  assert.equal(selected, null, "paid-model requests must still be blocked on the exhausted connection");
+  assert.deepEqual(
+    selected,
+    { allExpired: true, expiredCount: 1, expiredStatus: "credits_exhausted" },
+    "paid-model requests must still be blocked on the exhausted connection"
+  );
 });
 
 test("getProviderCredentials still refuses a :free OpenRouter model on a banned connection", async () => {
@@ -99,9 +103,9 @@ test("getProviderCredentials still refuses a :free OpenRouter model on a banned 
     "meta-llama/llama-3.1-8b-instruct:free"
   );
 
-  assert.equal(
+  assert.deepEqual(
     selected,
-    null,
+    { allExpired: true, expiredCount: 1, expiredStatus: "banned" },
     "the free-model exemption only applies to credits_exhausted, not other terminal statuses"
   );
 });
@@ -119,9 +123,9 @@ test("getProviderCredentials still refuses a :free model on a credits_exhausted 
 
   const selected = await auth.getProviderCredentials("openai", null, null, "some-model:free");
 
-  assert.equal(
+  assert.deepEqual(
     selected,
-    null,
+    { allExpired: true, expiredCount: 1, expiredStatus: "credits_exhausted" },
     "the exemption is OpenRouter-specific, since only OpenRouter uses the :free naming convention with a shared balance"
   );
 });

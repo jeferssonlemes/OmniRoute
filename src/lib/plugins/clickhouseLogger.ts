@@ -20,7 +20,9 @@
  * concatenating `messages` + `response`. See extractTurnDelta() below.
  */
 
-const CH_URL = (process.env.CLICKHOUSE_URL || "http://clickhouse.omniroute.svc.cluster.local:8123").replace(/\/$/, "");
+const CH_URL = (
+  process.env.CLICKHOUSE_URL || "http://clickhouse.omniroute.svc.cluster.local:8123"
+).replace(/\/$/, "");
 const CH_USER = process.env.CLICKHOUSE_USER || "default";
 const CH_PASS = process.env.CLICKHOUSE_PASSWORD || "";
 const DB = "default";
@@ -119,7 +121,9 @@ SETTINGS index_granularity = 8192
 `.trim();
   await chExec(ddl);
   // Existing deployments: add session_id without recreating the table (idempotent).
-  await chExec(`ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS session_id LowCardinality(String) DEFAULT ''`);
+  await chExec(
+    `ALTER TABLE ${TABLE} ADD COLUMN IF NOT EXISTS session_id LowCardinality(String) DEFAULT ''`
+  );
 }
 
 async function flushBuffer(): Promise<void> {
@@ -145,18 +149,15 @@ async function flushBuffer(): Promise<void> {
     }
     _state.consecutiveFailures = 0;
     if (process.env.APP_LOG_LEVEL === "debug") {
-      // eslint-disable-next-line no-console
       console.log(`[ClickHouse] flushed ${batch.length} rows`);
     }
   } catch (err: any) {
     _state.consecutiveFailures++;
-    // eslint-disable-next-line no-console
     console.error(`[ClickHouse] flush failed (${_state.consecutiveFailures}x): ${err.message}`);
     // Re-queue, but enforce max buffer. If we keep failing, drop oldest.
     const total = _state.buffer.length + batch.length;
     if (total > MAX_BUFFER) {
       const drop = total - MAX_BUFFER;
-      // eslint-disable-next-line no-console
       console.error(`[ClickHouse] buffer overflow — dropping ${drop} oldest rows`);
       _state.buffer = [...batch, ..._state.buffer].slice(drop);
     } else {
@@ -225,11 +226,11 @@ export async function initClickHouseLogger(): Promise<void> {
   try {
     await ensureTable();
     _state.initialized = true;
-    // eslint-disable-next-line no-console
-    console.log(`[ClickHouse] logger ready — ${TABLE} (ttl=7d, batch=${BATCH_SIZE}, maxBuf=${MAX_BUFFER})`);
+    console.log(
+      `[ClickHouse] logger ready — ${TABLE} (ttl=7d, batch=${BATCH_SIZE}, maxBuf=${MAX_BUFFER})`
+    );
   } catch (err: any) {
     _state.initError = err.message;
-    // eslint-disable-next-line no-console
     console.error(`[ClickHouse] init failed: ${err.message}`);
   }
 }
@@ -254,7 +255,10 @@ export function emitClickHouseLog(entry: Record<string, any>): void {
   // ClickHouse JSONEachRow DateTime64 does not accept ISO 8601 (`T`/`Z`).
   // Convert to the supported `YYYY-MM-DD HH:MM:SS.sss` form.
   const rawTs = typeof entry.timestamp === "string" ? entry.timestamp : new Date().toISOString();
-  const chTimestamp = rawTs.replace("T", " ").replace("Z", "").replace(/\.(\d{3})\d*$/, ".$1");
+  const chTimestamp = rawTs
+    .replace("T", " ")
+    .replace("Z", "")
+    .replace(/\.(\d{3})\d*$/, ".$1");
 
   const row: ChRow = {
     request_id: String(entry.id || entry.requestId || "unknown"),
