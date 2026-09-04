@@ -1,0 +1,1 @@
+- **fix(codex):** Pin the emitted Codex wire identity and the bundled `runner-cli` package to `0.153.3`, the current stable Codex CLI release with GPT-6-Astra API support, so the upstream Responses API no longer rejects Astra requests as an outdated Codex client.

@@ -12,6 +12,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const id = await import("../../open-sse/executors/claudeIdentity.ts");
 const hdr = await import("../../open-sse/config/anthropicHeaders.ts");
@@ -57,9 +58,25 @@ test("Claude CLI wire versions match the captured 2.1.220 binary", () => {
   assert.equal(hdr.CLAUDE_CLI_BILLING_VERSION, canonical.CLAUDE_CODE_CLIENT_BILLING_VERSION);
 });
 
-test("Codex client is pinned to the captured 0.149.0 release", () => {
-  assert.equal(codexCfg.getCodexClientVersion(), "0.149.0");
-  assert.equal(codexCfg.getCodexUserAgent(), "codex-cli/0.149.0 (Windows 10.0.26200; x64)");
-  assert.equal(codexCfg.getCodexDefaultHeaders().Version, "0.149.0");
-  assert.equal(codexCfg.getCodexCliRsHeaders()["User-Agent"], "codex_cli_rs/0.149.0");
+const CODEX_CLIENT_VERSION = "0.153.3";
+
+test("Codex client is pinned to the GPT-6-Astra-compatible release", () => {
+  assert.equal(codexCfg.getCodexClientVersion(), CODEX_CLIENT_VERSION);
+  assert.equal(
+    codexCfg.getCodexUserAgent(),
+    `codex-cli/${CODEX_CLIENT_VERSION} (Windows 10.0.26200; x64)`
+  );
+  assert.equal(codexCfg.getCodexDefaultHeaders().Version, CODEX_CLIENT_VERSION);
+  assert.equal(
+    codexCfg.getCodexCliRsHeaders()["User-Agent"],
+    `codex_cli_rs/${CODEX_CLIENT_VERSION}`
+  );
+});
+
+test("Docker installs the same pinned Codex client used by the wire identity", () => {
+  const dockerfile = readFileSync(new URL("../../Dockerfile", import.meta.url), "utf8");
+  assert.ok(
+    dockerfile.includes(`@openai/codex@${CODEX_CLIENT_VERSION}`),
+    "Dockerfile Codex package must stay in lockstep with DEFAULT_CODEX_CLIENT_VERSION"
+  );
 });
