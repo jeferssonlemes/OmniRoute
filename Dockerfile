@@ -332,6 +332,6 @@ RUN --mount=type=cache,id=s/92ca8a61-c1ba-421f-a389-d48ac7258c2d-apt-cache,targe
 
 # Install CLI tools globally. Separate layer from apt for better cache reuse.
 RUN --mount=type=cache,id=s/92ca8a61-c1ba-421f-a389-d48ac7258c2d-npm-cache,target=/root/.npm \
-  npm install -g --no-audit --no-fund @openai/codex @anthropic-ai/claude-code droid openclaw@latest
+  npm install -g --no-audit --no-fund @openai/codex@0.153.3 @anthropic-ai/claude-code droid openclaw@latest
 
 USER node
