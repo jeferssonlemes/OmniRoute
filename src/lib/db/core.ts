@@ -19,6 +19,7 @@ import { resolveWritableDataDir, getLegacyDotDataDir } from "../dataPaths";
 import { isNextBuildPhase } from "../buildPhase";
 import { runMigrations } from "./migrationRunner";
 import { runDbHealthCheck } from "./healthCheck";
+import { isDbHealthCheckDisabled } from "./healthCheckPolicy";
 import { resetAllDbModuleState } from "./stateReset";
 import { parseStoredPayload } from "../logPayloads";
 import { DEFAULT_DATABASE_SETTINGS, type DatabaseSettings } from "@/types/databaseSettings";
@@ -838,6 +839,7 @@ function offloadLegacyCallLogDetails(db: SqliteDatabase) {
 
 function shouldRunStartupDbHealthCheck(): boolean {
   if (process.env.OMNIROUTE_FORCE_DB_HEALTHCHECK === "1") return true;
+  if (isDbHealthCheckDisabled()) return false;
   return !isAutomatedTestProcess();
 }
 
@@ -940,7 +942,7 @@ function clearDbHealthCheckScheduler() {
 
 function startDbHealthCheckScheduler(db: SqliteDatabase) {
   clearDbHealthCheckScheduler();
-  if (isCloud || isBuildPhase || isAutomatedTestProcess()) return;
+  if (isCloud || isBuildPhase || isAutomatedTestProcess() || isDbHealthCheckDisabled()) return;
 
   const intervalMs = getDbHealthCheckIntervalMs();
   if (intervalMs <= 0) return;
@@ -1369,7 +1371,9 @@ export function getDbInstance(): SqliteDatabase {
   if (shouldRunStartupDbHealthCheck()) {
     const skipIntegrityCheck = process.env.OMNIROUTE_SKIP_DB_HEALTHCHECK === "1";
     if (skipIntegrityCheck) {
-      console.log("[DB] Health check skipped (OMNIROUTE_SKIP_DB_HEALTHCHECK=1)");
+      console.log(
+        "[DB] SQLite integrity check skipped; forced logical health check remains enabled"
+      );
     }
     runDbHealthCheck(db, {
       autoRepair: true,
@@ -1377,6 +1381,10 @@ export function getDbInstance(): SqliteDatabase {
       skipIntegrityCheck,
       createBackupBeforeRepair: () => createHealthCheckBackup(db),
     });
+  } else if (isDbHealthCheckDisabled()) {
+    console.log(
+      "[DB] Startup and periodic health checks disabled (OMNIROUTE_SKIP_DB_HEALTHCHECK=1)"
+    );
   }
 
   setDb(db);
