@@ -104,7 +104,7 @@ export const APIKEY_PROVIDERS_REGIONAL = {
     // Kimi official-partnership aff link (2026-07) — folds into the kimi-coding
     // card (PROVIDER_CONNECTION_ALIASES in providerPageUtils.ts) so this rarely
     // renders its own header, but stays in sync with kimi-coding's aff link.
-    website: "https://www.kimi.com/code?aff=omniroute",
+    website: "https://www.kimi.ai/code?aff=omniroute",
     hiddenFromDashboard: true,
   },
   minimax: {
@@ -268,6 +268,8 @@ export const APIKEY_PROVIDERS_REGIONAL = {
     color: "#EA580C",
     textIcon: "MT",
     website: "https://mimo.mi.com",
+    apiHint:
+      "Use a Token Plan key (tp-…) and select the cluster (Singapore, Amsterdam, or China) that issued it.",
   },
   baidu: {
     id: "baidu",
@@ -469,6 +471,19 @@ export const APIKEY_PROVIDERS_REGIONAL = {
     freeNote: "Permanently free API - no credit card required.",
     authHint: "Get API key at agnes-ai.com",
   },
+  "agnes-cn": {
+    id: "agnes-cn",
+    serviceKinds: ["llm"],
+    alias: "agnescn",
+    name: "Agnes AI (China)",
+    icon: "auto_awesome",
+    color: "#047857",
+    textIcon: "AC",
+    website: "https://api.agnes-ai.cn",
+    hasFree: true,
+    freeNote: "Permanently free, no API credit card required.",
+    authHint: "Get API key from the Agnes CN site.",
+  },
   sealion: {
     id: "sealion",
     serviceKinds: ["llm"],
@@ -494,7 +509,7 @@ export const APIKEY_PROVIDERS_REGIONAL = {
     textIcon: "CS",
     website: "https://api.ncloud-docs.com/docs/en/ai-naver-clovastudio-summary",
     apiHint:
-      "CLOVA Studio (HyperCLOVA X) is OpenAI-compatible on /v1/openai. OmniRoute probes /v1/openai/models and routes chat traffic to /v1/openai/chat/completions. Uses the current clovastudio.stream.ntruss.com host — the legacy clovastudio.apigw.ntruss.com endpoint is being deprecated.",
+      "OmniRoute routes chat traffic to the native Chat Completions v3 API (/v3/chat-completions/{model}), not the OpenAI-compatibility shim. All three v3 models are served: HCX-007 (reasoning, text only), HCX-005 (vision — accepts both public image URLs and inline base64 images), and HCX-DASH-002 (lightweight, text only). Requests stream upstream and are accumulated into a JSON body when the client asks for a non-streaming response.",
   },
   internlm: {
     id: "internlm",

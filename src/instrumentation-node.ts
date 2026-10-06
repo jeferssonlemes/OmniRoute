@@ -102,7 +102,7 @@ export async function ensureDbReadyForBoot(
   }
 }
 
-function isBackgroundServicesDisabled(): boolean {
+export function isBackgroundServicesDisabled(): boolean {
   const raw = process.env.OMNIROUTE_DISABLE_BACKGROUND_SERVICES;
   if (!raw) return false;
   return new Set(["1", "true", "yes", "on"]).has(raw.trim().toLowerCase());
@@ -282,6 +282,7 @@ export async function registerQuotaFetchers(): Promise<void> {
     { registerQwenTokenPlanQuotaFetcher },
     { registerCrofUsageFetcher },
     { registerDeepseekQuotaFetcher },
+    { registerMoonshotQuotaFetcher, registerMoonshotFetchersForNodes },
     { registerOpenrouterQuotaFetcher },
     { registerOpencodeQuotaFetcher },
     { registerGrokWebQuotaFetcher },
@@ -292,6 +293,7 @@ export async function registerQuotaFetchers(): Promise<void> {
     import("@omniroute/open-sse/services/qwenTokenPlanQuotaFetcher"),
     import("@omniroute/open-sse/services/crofUsageFetcher"),
     import("@omniroute/open-sse/services/deepseekQuotaFetcher"),
+    import("@omniroute/open-sse/services/moonshotQuotaFetcher"),
     import("@omniroute/open-sse/services/openrouterQuotaFetcher"),
     import("@omniroute/open-sse/services/opencodeQuotaFetcher"),
     import("@omniroute/open-sse/services/grokQuotaFetcher"),
@@ -303,6 +305,20 @@ export async function registerQuotaFetchers(): Promise<void> {
   registerQwenTokenPlanQuotaFetcher();
   registerCrofUsageFetcher();
   registerDeepseekQuotaFetcher();
+  registerMoonshotQuotaFetcher();
+  try {
+    const { getProviderNodes } = await import("@/lib/db/providers");
+    const nodes = await getProviderNodes();
+    registerMoonshotFetchersForNodes(
+      (Array.isArray(nodes) ? nodes : []).map((node) => ({
+        id: typeof node.id === "string" ? node.id : null,
+        prefix: typeof node.prefix === "string" ? node.prefix : null,
+        baseUrl: typeof node.baseUrl === "string" ? node.baseUrl : null,
+      }))
+    );
+  } catch (error) {
+    console.warn("[STARTUP] Moonshot custom-node fetcher scan skipped:", error);
+  }
   registerOpenrouterQuotaFetcher();
   registerOpencodeQuotaFetcher();
   registerGrokWebQuotaFetcher();
@@ -318,9 +334,20 @@ export async function registerNodejs(): Promise<void> {
   // of the generic "next-server" standalone server name.
   process.title = renameProcessTitle(process.title);
 
+  // #13695: the inference API and `/v1/models` follow DIFFERENT auth settings,
+  // so `GET /v1/models` answering 401 does not mean inference is protected.
+  // #12568 added this warning for the API bridge and live-WS servers, but not
+  // for the Next server that actually answers `/v1/chat/completions` and
+  // `/v1/responses` — and that one binds every interface by default. Runs
+  // before the DB work below so it is not buried under the boot log.
+  (await import("@/lib/startup/nonLoopbackApiKeyGuard")).warnIfInferenceServerExposed();
+
   // Initialize proxy fetch patch FIRST (before any HTTP requests)
   await import("@omniroute/open-sse/utils/proxyFetch.ts");
   console.log("[STARTUP] Global fetch proxy patch initialized");
+
+  // Subscribe the proxy set-aside webhook bridge (side-effect import only).
+  await import("@/lib/proxyEvents/proxyTransitionBridge");
 
   // Register quota fetchers early so combo routing can use real quota-aware
   // scoring for generic providers in the App Router production runtime.
@@ -591,12 +618,12 @@ export async function registerNodejs(): Promise<void> {
     console.warn("[STARTUP] Could not start cleanup scheduler (non-fatal):", msg);
   }
 
-  // Warm the model catalog's durable, apiKey-independent sub-caches at
-  // startup — see warmModelCatalogCache() for why the top-level Response
-  // cache alone doesn't deliver this. Fire-and-forget, non-fatal.
-  void warmModelCatalogCache();
-
   if (!isBackgroundServicesDisabled()) {
+    // Warm the model catalog's durable, apiKey-independent sub-caches at
+    // startup — see warmModelCatalogCache() for why the top-level Response
+    // cache alone doesn't deliver this. Fire-and-forget, non-fatal.
+    void warmModelCatalogCache();
+
     // All services are independent — run in parallel for faster cold start.
     await Promise.allSettled([
       import("@/lib/services/bootstrap")

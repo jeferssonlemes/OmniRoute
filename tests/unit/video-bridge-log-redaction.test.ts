@@ -26,12 +26,16 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { logClientRawRequestRedacted } from "../../src/lib/guardrails/videoBridgeSnapshotRedaction.ts";
+
 const testDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "omni-video-log-redaction-test-"));
 process.env.DATA_DIR = testDataDir;
 
 const coreDb = await import("../../src/lib/db/core.ts");
-const { getCallLogById } = await import("../../src/lib/usage/callLogs.ts");
+const { getCallLogById, getCallLogs } = await import("../../src/lib/usage/callLogs.ts");
 const { persistAttemptLogs } = await import("../../open-sse/handlers/chatCore/attemptLogging.ts");
+const { recordEarlyKeepaliveBytes, takeEarlyKeepaliveBytes } =
+  await import("../../open-sse/utils/earlyKeepaliveByteBuffer.ts");
 
 const SECRET = "secret words";
 const FULL_TEXT = `[Video 1]: A person talks. transcript[00:00-00:02]: ${SECRET}`;
@@ -58,7 +62,11 @@ function videoBody() {
 }
 
 function baseCtx(overrides: Record<string, unknown> = {}) {
+  // #13481/#13546: the call log row is keyed on traceId. It defaults to
+  // pendingRequestId so these tests keep polling by the id they pass in.
+  const pendingRequestId = (overrides.pendingRequestId as string) ?? "REPLACE";
   return {
+    traceId: overrides.traceId ?? pendingRequestId,
     provider: "openai",
     connectionId: "conn-1",
     model: "gpt-x",
@@ -92,11 +100,14 @@ function baseCtx(overrides: Record<string, unknown> = {}) {
 // write while still bounded, and a fast machine still returns on the first pass.
 const POLL_DEADLINE_MS = 30_000;
 
-async function pollForCallLog(id: string, deadlineMs = POLL_DEADLINE_MS) {
+async function pollForCallLog(traceId: string, deadlineMs = POLL_DEADLINE_MS) {
   const deadline = Date.now() + deadlineMs;
   for (;;) {
-    const row = await getCallLogById(id);
-    if (row) return row as Record<string, unknown>;
+    const rows = await getCallLogs({ correlationId: traceId, limit: 5 });
+    if (rows[0]?.id) {
+      const row = await getCallLogById(rows[0].id);
+      if (row) return row as Record<string, unknown>;
+    }
     if (Date.now() >= deadline) return null;
     await new Promise((r) => setTimeout(r, 20));
   }
@@ -147,6 +158,41 @@ test("persisted requestBody carries the placeholder and never the raw transcript
   );
 });
 
+test("#12150 P2 surface 2: persistAttemptLogs marks the call_logs row video_content_removed=1 when ctx.videoContentRemoved is true", async () => {
+  // The continuation fail-closed (resolvePreviousResponseState) depends on this
+  // marker being written for any request whose stored client snapshot had its
+  // video transcript redacted. This proves the ctx.videoContentRemoved signal
+  // reaches the persisted row; the row is the exact thing the continuation store
+  // reads back.
+  const id = "video-marker-1";
+  persistAttemptLogs(
+    { status: 200, tokens: { input: 1, output: 2 } },
+    baseCtx({ pendingRequestId: id, videoContentRemoved: true })
+  );
+  const row = await pollForCallLog(id);
+  assert.ok(row, "call log row should be persisted");
+  const marker = coreDb
+    .getDbInstance()
+    .prepare("SELECT video_content_removed FROM call_logs WHERE id = ?")
+    .get(row.id) as { video_content_removed: number };
+  assert.equal(marker.video_content_removed, 1);
+});
+
+test("#12150 P2 surface 2: the marker defaults to 0 for an ordinary (non-video) request", async () => {
+  const id = "video-marker-control-1";
+  persistAttemptLogs(
+    { status: 200, tokens: { input: 1, output: 2 } },
+    baseCtx({ pendingRequestId: id })
+  );
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  const marker = coreDb
+    .getDbInstance()
+    .prepare("SELECT video_content_removed FROM call_logs WHERE id = ?")
+    .get(row.id) as { video_content_removed: number };
+  assert.equal(marker.video_content_removed, 0);
+});
+
 test("control: without a redaction map the persisted requestBody keeps the original text (model path untouched)", async () => {
   const id = "video-control-1";
   persistAttemptLogs(
@@ -159,6 +205,187 @@ test("control: without a redaction map the persisted requestBody keeps the origi
   assert.ok(
     persistedText.includes(SECRET),
     "control call (no redaction map) must keep the raw transcript text"
+  );
+});
+
+test("observed requests never retain an echoed transcript in the response or detailed pipeline artifact", async () => {
+  const id = "video-response-retention-1";
+  const responseBody = { choices: [{ message: { content: SECRET } }] };
+  const detailedPayloads = {
+    providerResponse: responseBody,
+    streamChunks: { client: [SECRET], provider: [SECRET] },
+  };
+  persistAttemptLogs(
+    {
+      status: 200,
+      responseBody,
+      providerRequest: { messages: [{ role: "user", content: FULL_TEXT }] },
+      providerResponse: responseBody,
+      clientResponse: responseBody,
+    },
+    baseCtx({
+      pendingRequestId: id,
+      detailedLoggingEnabled: true,
+      reqLogger: { getPipelinePayloads: () => detailedPayloads },
+      videoContentRemoved: true,
+      videoBridgeLogRedaction: [
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 1,
+          fullText: FULL_TEXT,
+          redactedText: PLACEHOLDER_TEXT,
+        },
+      ],
+    })
+  );
+
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  assert.equal(JSON.stringify(row).includes(SECRET), false);
+  assert.equal(JSON.stringify(row).includes(FULL_TEXT), false);
+  assert.equal(JSON.stringify(responseBody).includes(SECRET), true, "client response stays live");
+});
+
+test("non-video requests retain their response body as before", async () => {
+  const id = "video-response-retention-control-1";
+  persistAttemptLogs(
+    { status: 200, responseBody: { choices: [{ message: { content: SECRET } }] } },
+    baseCtx({ pendingRequestId: id })
+  );
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  assert.equal(JSON.stringify(row.responseBody).includes(SECRET), true);
+});
+
+test("observed video attempts discard early keepalive bytes instead of retaining them in memory", async () => {
+  const id = "video-early-keepalive-retention-1";
+  const correlationId = "video-early-keepalive-retention-corr-1";
+  recordEarlyKeepaliveBytes(correlationId, SECRET);
+
+  persistAttemptLogs(
+    { status: 200 },
+    baseCtx({
+      pendingRequestId: id,
+      correlationId,
+      detailedLoggingEnabled: true,
+      videoContentRemoved: true,
+      videoBridgeLogRedaction: [
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 1,
+          fullText: FULL_TEXT,
+          redactedText: PLACEHOLDER_TEXT,
+        },
+      ],
+    })
+  );
+
+  assert.deepEqual(takeEarlyKeepaliveBytes(correlationId), []);
+  const row = await pollForCallLog(correlationId);
+  assert.ok(row);
+  assert.equal(JSON.stringify(row).includes(SECRET), false);
+});
+
+test("observed video logs omit the request when the per-part redaction shadow cannot be applied", async () => {
+  const id = "video-missing-shadow-1";
+  persistAttemptLogs({ status: 200 }, baseCtx({ pendingRequestId: id, videoContentRemoved: true }));
+
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  assert.equal(JSON.stringify(row.requestBody).includes(SECRET), false);
+  assert.equal((row.requestBody as Record<string, unknown>)._omniroute_omitted, "video-transcript");
+});
+
+test("observed video logs omit the whole request when only some shadow entries match", async () => {
+  const id = "video-partial-shadow-1";
+  const secondSecret = "second private transcript";
+  const secondFullText = `[Video 2]: transcript[00:02-00:04]: ${secondSecret}`;
+  const body = videoBody();
+  const content = body.messages[1].content;
+  assert.ok(Array.isArray(content));
+  content.push({ type: "text", text: `${secondFullText} modified after preCall` });
+
+  persistAttemptLogs(
+    { status: 200 },
+    baseCtx({
+      pendingRequestId: id,
+      body,
+      videoContentRemoved: true,
+      videoBridgeLogRedaction: [
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 1,
+          fullText: FULL_TEXT,
+          redactedText: PLACEHOLDER_TEXT,
+        },
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 2,
+          fullText: secondFullText,
+          redactedText: "[redacted-video-transcript]",
+        },
+      ],
+    })
+  );
+
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  assert.equal((row.requestBody as Record<string, unknown>)._omniroute_omitted, "video-transcript");
+  assert.equal(JSON.stringify(row.requestBody).includes(secondSecret), false);
+  assert.equal(
+    JSON.stringify(body).includes(secondSecret),
+    true,
+    "live model request is unchanged"
+  );
+});
+
+test("observed video logs keep a redacted request when every video shadow matches", async () => {
+  const id = "video-complete-shadow-1";
+  const secondSecret = "another private transcript";
+  const secondFullText = `[Video 2]: transcript[00:02-00:04]: ${secondSecret}`;
+  const body = videoBody();
+  const content = body.messages[1].content;
+  assert.ok(Array.isArray(content));
+  content.push({ type: "text", text: secondFullText });
+
+  persistAttemptLogs(
+    { status: 200 },
+    baseCtx({
+      pendingRequestId: id,
+      body,
+      videoContentRemoved: true,
+      videoBridgeLogRedaction: [
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 1,
+          fullText: FULL_TEXT,
+          redactedText: PLACEHOLDER_TEXT,
+        },
+        {
+          container: "messages",
+          messageIndex: 1,
+          partIndex: 2,
+          fullText: secondFullText,
+          redactedText: "[redacted-video-transcript]",
+        },
+      ],
+    })
+  );
+
+  const row = await pollForCallLog(id);
+  assert.ok(row);
+  assert.equal((row.requestBody as Record<string, unknown>)._omniroute_omitted, undefined);
+  assert.equal(persistedPartText(row.requestBody), PLACEHOLDER_TEXT);
+  assert.equal(JSON.stringify(row.requestBody).includes(secondSecret), false);
+  assert.equal(
+    JSON.stringify(body).includes(secondSecret),
+    true,
+    "live model request is unchanged"
   );
 });
 
@@ -263,5 +490,81 @@ test("Scenario A (adversarial review): a message prepended AFTER the guardrail b
     persisted.messages[0].content,
     "You are a helpful assistant.",
     "the prepended system message must be untouched"
+  );
+});
+
+// #12150 P2 surface 1 (the dominant transcript-retention leak): the RAW client-request
+// snapshot passed to reqLogger.logClientRawRequest (open-sse/handlers/chatCore.ts's
+// "0. Log client raw request" step) is a DIFFERENT sink from persistAttemptLogs above —
+// it is captured before the guardrail chain even runs, so it carries the client's raw
+// `transcript`/`audioTranscript` FIELDS on a structured video part, not a flattened
+// description string. Importing the real chatCore.ts here would pull the full
+// request-pipeline dependency graph (executors, providers, combo routing, DB-backed
+// settings, ...) into the test just to reach one guarded call a few hundred lines into
+// a 5900+ line handler, for no additional proof beyond what's below — so this calls the
+// REAL exported `logClientRawRequestRedacted` (the exact function chatCore.ts's call site
+// invokes, post file-size-refactor) against a fake logClientRawRequest. The pure redaction
+// helper itself has its own thorough suite in
+// tests/unit/guardrails/videoBridgeSnapshotRedaction.test.ts.
+function fakeReqLogger() {
+  const calls: unknown[] = [];
+  return {
+    calls,
+    logClientRawRequest(_endpoint: unknown, body: unknown, _headers?: unknown) {
+      calls.push(body);
+    },
+  };
+}
+
+test("surface 2 (raw snapshot): the fake logClientRawRequest receives a redacted snapshot only when videoBridgeObserved is true", () => {
+  const rawBody = {
+    model: "openai/gpt-x",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "look at this video" },
+          {
+            type: "input_video",
+            video_url: "https://example.com/clip.mp4",
+            transcript: { cues: [{ text: SECRET, startSeconds: 0, endSeconds: 2 }] },
+          },
+        ],
+      },
+    ],
+  };
+  const clientRawRequest = { endpoint: "/v1/chat/completions", body: rawBody, headers: {} };
+
+  const observedLogger = fakeReqLogger();
+  logClientRawRequestRedacted(observedLogger, clientRawRequest, true);
+  const observedSnapshot = observedLogger.calls[0];
+  assert.ok(
+    !JSON.stringify(observedSnapshot).includes(SECRET),
+    "an observed request must not log the raw transcript"
+  );
+  assert.notEqual(
+    observedSnapshot,
+    rawBody,
+    "the observed path must log a redacted CLONE, not the original reference"
+  );
+  assert.ok(
+    JSON.stringify(rawBody).includes(SECRET),
+    "clientRawRequest.body itself must stay untouched for every other consumer (translation/dispatch)"
+  );
+
+  const nonObservedLogger = fakeReqLogger();
+  logClientRawRequestRedacted(nonObservedLogger, clientRawRequest, false);
+  assert.equal(
+    nonObservedLogger.calls[0],
+    rawBody,
+    "the non-observed path must log the exact same object reference — byte-identical, no clone"
+  );
+
+  const skippedLogger = fakeReqLogger();
+  logClientRawRequestRedacted(skippedLogger, null, true);
+  assert.equal(
+    skippedLogger.calls.length,
+    0,
+    "a missing clientRawRequest must not call logClientRawRequest at all (mirrors the old if-guard)"
   );
 });

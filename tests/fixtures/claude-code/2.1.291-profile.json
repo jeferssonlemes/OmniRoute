@@ -1,0 +1,13 @@
+{
+  "package": "@anthropic-ai/claude-code-linux-x64-musl",
+  "version": "2.1.291",
+  "npmIntegrity": "sha512-coGTrqEklCLBed+i2FXzg/3IqHIPd9/mGTinEqO8IlmKk8qOqFYTf5zQzJ9m3/T+p9Qt2m1314/S00gOU/Femw==",
+  "binarySHA256": "e4b1fb39b56a6798063fa04912e838c01dd58dffeb238d6dcd31ad2d172e82c5",
+  "sdkPackageVersion": "0.128.0",
+  "runtimeVersion": "v26.3.0",
+  "fingerprintSalt": "59cf53e54c78",
+  "billingSuffixForEmptyUserMessage": "926",
+  "billingSuffixIsMessageDerived": true,
+  "buildGitSHA": "f7d32cfe47f735a7e70c5cce1ff6044b24692b4c",
+  "buildTime": "2026-10-06T02:24:19Z"
+}
