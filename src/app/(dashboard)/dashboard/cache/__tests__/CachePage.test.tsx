@@ -189,11 +189,12 @@ describe("CachePage", () => {
 
     render(<CachePage />);
 
-    await waitFor(() => {
-      expect(screen.getByText("Prompt Cache (Provider-Side)")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Breakdown by Provider")).toBeInTheDocument();
+    // The tab title renders before the asynchronous stats request finishes.
+    // Wait for fetched content, not the static title, before asserting data.
+    expect(await screen.findByText("Breakdown by Provider")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Prompt Cache (Provider-Side)" })
+    ).toBeInTheDocument();
     expect(screen.getByText("claude")).toBeInTheDocument();
     expect(screen.getAllByText("60.0%").length).toBeGreaterThan(0);
     expect(screen.queryByText("Semantic cache is disabled.")).not.toBeInTheDocument();

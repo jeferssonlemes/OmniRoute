@@ -113,6 +113,9 @@ export function FlowCanvas({
   // disposed ReactFlow instance.
   useEffect(() => {
     return () => {
+      // onInit's timer captures the instance directly, so clearing the ref is
+      // insufficient. Invalidate its generation before the DOM is disposed.
+      generationRef.current += 1;
       rfInstance.current = null;
     };
   }, []);
