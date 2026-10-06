@@ -1,9 +1,9 @@
-// Kept in lockstep with the codex CLI actually installed in the OmniRoute image
-// (Dockerfile runner-cli pins `@openai/codex`; runtime is 0.153.3 as of
-// 2026-09-04). When the image's Codex package is bumped, refresh this so the
-// fingerprint OpenAI sees from the OAuth/Responses face matches the real client
-// version. Overridable per-deployment via the CODEX_CLIENT_VERSION env.
-export const DEFAULT_CODEX_CLIENT_VERSION = "0.153.3";
+// Kept in lockstep with the `@openai/codex@x.y.z` pin in the root Dockerfile
+// (the CLI installed in the OmniRoute image). When that image pin is bumped,
+// refresh this so the fingerprint OpenAI sees from the OAuth/Responses face
+// matches the real client version. Overridable per-deployment via
+// CODEX_CLIENT_VERSION.
+export const DEFAULT_CODEX_CLIENT_VERSION = "0.156.1";
 export const CODEX_CLI_RS_ORIGINATOR = "codex_cli_rs";
 
 export function getCodexCliRsHeaders(

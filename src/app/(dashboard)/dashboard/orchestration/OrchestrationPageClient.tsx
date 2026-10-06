@@ -8,42 +8,26 @@ import { useOrchestrationSnapshot } from "./hooks/useOrchestrationSnapshot";
 import { AgentsTab } from "./tabs/AgentsTab";
 import { RoutingTab } from "./tabs/RoutingTab";
 import { OverviewTab } from "./tabs/OverviewTab";
+import { HistoryTab } from "./tabs/HistoryTab";
 import { OrchestrationDrawer } from "./drawer/OrchestrationDrawer";
 import { OrchestrationToolbar } from "./OrchestrationToolbar";
 import { collectProviderKeys, filterSnapshot } from "./model/filterSnapshot";
+import { parseCsvSet, toggleCsv } from "./model/urlParams";
 import type { OrchFilter } from "./model/filterSnapshot";
 import { ORCH_STATES } from "./model/orchestrationTypes";
 import type { OrchSource, OrchState } from "./model/orchestrationTypes";
 
-const TABS = ["agents", "routing", "overview"] as const;
+const TABS = ["agents", "routing", "overview", "history"] as const;
 type Tab = (typeof TABS)[number];
 
 const VALID_STATES: ReadonlySet<OrchState> = new Set(ORCH_STATES);
 const VALID_SOURCES: ReadonlySet<OrchSource> = new Set(["cloud-agent", "a2a", "conductor"]);
 
-/** CSV → Set, dropping empty/invalid entries (`valid` omitted accepts any non-empty token). */
-function parseCsvSet<T extends string>(raw: string | null, valid?: ReadonlySet<T>): Set<T> {
-  const out = new Set<T>();
-  if (!raw) return out;
-  for (const v of raw.split(",")) {
-    if (!v) continue;
-    if (!valid || valid.has(v as T)) out.add(v as T);
-  }
-  return out;
-}
-
-/** Toggle `value` in `current`, returning the next CSV (or `null` to drop the param). */
-function toggleCsv<T extends string>(current: ReadonlySet<T>, value: T): string | null {
-  const next = new Set(current);
-  if (next.has(value)) next.delete(value);
-  else next.add(value);
-  return next.size > 0 ? [...next].sort().join(",") : null;
-}
-
 const TAB_KEY: Record<Tab, string> = {
   agents: "tabAgents",
   routing: "tabRouting",
   overview: "tabOverview",
+  history: "tabHistory",
 };
 
 /**
@@ -131,16 +115,37 @@ export default function OrchestrationPageClient() {
     [collapsed, setParams]
   );
   const closeDrawer = useCallback(() => setParams({ node: null }), [setParams]);
+  const onActionDone = useCallback(
+    (newNodeId?: string) => {
+      refetch();
+      if (newNodeId) setParams({ node: newNodeId });
+    },
+    [refetch, setParams]
+  );
+  const clearFilters = useCallback(
+    () => setParams({ q: null, state: null, source: null, provider: null }),
+    [setParams]
+  );
 
   const selectedNode = nodeId ? (snapshot.nodes.find((n) => n.id === nodeId) ?? null) : null;
   const onNodeClick = (id: string) =>
     id.startsWith("overflow:")
       ? setParams({ tab: "overview", node: null })
       : setParams({ node: id });
+  // History renders its own local-state drawer (HistoryTab.tsx) over persisted runs that
+  // generally are not present in the live snapshot `?node=` resolves against — so switching to
+  // it must drop `?node=` (otherwise the page-level drawer below would still open once its tab
+  // becomes active again) and the page-level drawer itself must not render while History is
+  // active (it is a fixed overlay with an `inset-0` backdrop that would otherwise sit on top of
+  // the History grid, including on a deep link like `?tab=history&node=<id>`).
+  const onSelectTab = useCallback(
+    (tb: Tab) => setParams(tb === "history" ? { tab: tb, node: null } : { tab: tb }),
+    [setParams]
+  );
 
   return (
     <div className="flex flex-col h-[calc(100dvh-6rem)] min-h-[480px] p-4 gap-3">
-      <TabList tab={tab} t={t} onSelect={(tb) => setParams({ tab: tb })} />
+      <TabList tab={tab} t={t} onSelect={onSelectTab} />
       <div className="flex-1 min-h-0 flex flex-col gap-2">
         {(tab === "agents" || tab === "overview") && (
           <OrchestrationToolbar filter={filter} providerKeys={providerKeys} setParams={setParams} />
@@ -154,6 +159,8 @@ export default function OrchestrationPageClient() {
               onToggleCompleted={setShowCompleted}
               collapsed={collapsed}
               onToggleCollapse={onToggleCollapse}
+              filter={filter}
+              onClearFilters={clearFilters}
             />
           )}
           {tab === "routing" && (
@@ -173,9 +180,21 @@ export default function OrchestrationPageClient() {
               onSeeInGraph={(id) => setParams({ tab: "agents", node: id })}
             />
           )}
+          {tab === "history" && <HistoryTab />}
         </div>
       </div>
-      <OrchestrationDrawer node={selectedNode} onClose={closeDrawer} onActionDone={refetch} />
+      {/* A successful repeat hands back the CANVAS id of the task it created: refetch, then
+          focus it (`?node=`) so the operator lands on the new run instead of staring at the
+          finished one. No id (approve/cancel, or a creation response without one) keeps the
+          current selection. The History tab renders its own drawer and deliberately does NOT
+          navigate (HistoryTab.tsx) — its runs are not addressable in the live snapshot. */}
+      {tab !== "history" && (
+        <OrchestrationDrawer
+          node={selectedNode}
+          onClose={closeDrawer}
+          onActionDone={onActionDone}
+        />
+      )}
     </div>
   );
 }

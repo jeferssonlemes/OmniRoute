@@ -1,0 +1,1 @@
+Align the Claude Code wire identity, bundled runner-cli package, SDK version, and empty-message billing fingerprint with the official 2.1.291 distribution. Preserve runtime overrides and message-derived fingerprints, and guard the reported Opus 5.5 minimum client version with regression tests.
