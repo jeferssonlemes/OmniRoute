@@ -83,6 +83,7 @@ function sanitize(headers: Record<string, unknown>): Record<string, unknown> {
         /(antigravity\/cli\/\d+\.\d+\.\d+ \(aidev_client; os_type=)[^;]+(; arch=)[^;]+(; auth_method=[^)]+\))/g,
         "$1<OS>$2<ARCH>$3"
       )
+      .replace(/(copilot\/\d+\.\d+\.\d+) \((?:linux|darwin|win32)\)( term\/)/g, "$1 (<PLATFORM>)$2")
       .replace(/kimi-\d{10,}/g, "kimi-<TS>")
       .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "<UUID>");
     if (NODE_VERSION) s = s.split(NODE_VERSION).join("<NODE>");
@@ -146,6 +147,14 @@ test("GOLDEN provider.ts translate-path snapshot is deterministic", () => {
   const a = JSON.stringify(buildProviderTranslatePathSnapshot());
   const b = JSON.stringify(buildProviderTranslatePathSnapshot());
   assert.equal(a, b, "translate-path snapshot must be deterministic after sanitize");
+});
+
+test("GOLDEN sanitizer normalizes Copilot CLI platform without hiding its version", () => {
+  for (const platform of ["linux", "darwin", "win32"]) {
+    assert.deepEqual(sanitize({ "user-agent": `copilot/1.0.88 (${platform}) term/unknown` }), {
+      "user-agent": "copilot/1.0.88 (<PLATFORM>) term/unknown",
+    });
+  }
 });
 
 test("GOLDEN guard catches translate-path drift", () => {

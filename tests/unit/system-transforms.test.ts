@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { getClaudeCodeClientBuildRevision } from "../../src/shared/constants/claudeCodeClient.ts";
 
 const {
   applySystemTransformPipeline,
@@ -559,7 +560,7 @@ const UI_DEFAULTS_SNAPSHOT = {
           entrypoint: "sdk-cli",
           versionFormat: "ex-machina",
           cchAlgo: "sha256-first-user",
-          buildRevision: "1e2",
+          buildRevision: getClaudeCodeClientBuildRevision(),
         },
       ],
     },
